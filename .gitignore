@@ -1,0 +1,30 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# VS Code
+.vscode/
+
+# Large data (if applicable)
+data/raw/
+data/
