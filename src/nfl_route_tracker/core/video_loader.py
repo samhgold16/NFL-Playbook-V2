@@ -24,18 +24,12 @@ class VideoMetadata:
 
     Attributes:
     -----------
-    width : int
-        Frame width in pixels
-    height : int
-        Frame height in pixels
-    fps : float
-        Frames per second
-    total_frames : int
-        Total number of frames in video
-    duration_seconds : float
-        Video duration in seconds
-    codec : str
-        Video codec (e.g., 'mp4v', 'avc1')
+    width : Frame width in pixels
+    height : Frame height in pixels
+    fps : Frames per second
+    total_frames : Total number of frames in video
+    duration_seconds : Video duration in seconds
+    codec : Video codec (e.g., 'mp4v', 'avc1')
     """
     width: int
     height: int
@@ -57,7 +51,6 @@ class VideoLoader:
     """
     Handles loading and iterating over video frames.
 
-
     Example Usage:
     -------------
     ```python
@@ -77,12 +70,9 @@ class VideoLoader:
 
     Parameters:
     -----------
-    video_path : str or Path
-        Path to the video file
-    grayscale : bool
-        If True, convert frames to grayscale (useful for motion detection)
-    resize : Optional[Tuple[int, int]]
-        If provided, resize frames to (width, height)
+    video_path :  Path to the video file
+    grayscale : If True, convert frames to grayscale (useful for motion detection)
+    resize : If provided, resize frames to (width, height)
     """
 
     def __init__(self, video_path: Union[str, Path], grayscale: bool = False, resize: Optional[Tuple[int, int]] = None):
@@ -220,13 +210,10 @@ class VideoLoader:
         Apply preprocessing to a frame (resize then greyscale).
         Parameters:
         -----------
-        frame : np.ndarray
-            Raw BGR frame from OpenCV (shape: height, width, 3)
+        frame : Raw BGR frame from OpenCV (shape: height, width, 3)
 
-        Returns:
-        --------
-        np.ndarray
-            Preprocessed frame
+        Returns: Preprocessed frame
+        -----------
         """
         # Resize if requested
         if self.resize is not None:
@@ -245,13 +232,10 @@ class VideoLoader:
         Get a specific frame by number.
         Parameters:
         -----------
-        frame_number : int
-            Frame index (0-based)
+        frame_number : Frame index (0-based)
 
-        Returns:
-        --------
-        np.ndarray
-            The requested frame
+        Returns: The requested frame
+        -----------
         """
         if self._cap is None:
             raise RuntimeError("Video not opened")
@@ -281,11 +265,9 @@ class VideoLoader:
             self._current_frame = 0
             print("[VideoLoader] Reset to frame 0")
 
-
-from nfl_route_tracker.utils.test_video_generator import TestVideoGenerator, VideoConfig
-from pathlib import Path
-
 if __name__ == "__main__":
+    from nfl_route_tracker.utils.test_video_generator import TestVideoGenerator, VideoConfig
+    from pathlib import Path
     """
     Test the VideoLoader module.
     """

@@ -1,0 +1,1 @@
+PYTHONPATH=src python -m nfl_route_tracker.visualizations.visualizer

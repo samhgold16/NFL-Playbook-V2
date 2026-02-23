@@ -479,39 +479,12 @@ class TestVideoGenerator:
             writer.write(frame)
 
         writer.release()
-        print(f"                     Saved to: {output_path}")
-        print(f"                     Total frames: {total}")
-        print(f"                     Start: ({start_x}, {start_y})")
-        print(f"                     End: ({ground_truth[-1][0]:.1f}, {ground_truth[-1][1]:.1f})")
+        print(f"Saved to: {output_path}")
+        print(f"Total frames: {total}")
+        print(f"Start: ({start_x}, {start_y})")
+        print(f"End: ({ground_truth[-1][0]:.1f}, {ground_truth[-1][1]:.1f})")
 
         return output_path, ground_truth
-
-
-# # NEED BELOW?????
-
-# # Convenience functions for quick testing
-# def create_simple_test_video(output_path: str = "simple_test.mp4") -> str:
-#     """Create a simple test video with one object moving right."""
-#     gen = TestVideoGenerator()
-#     path, _ = gen.create_linear_motion(output_path, direction="right")
-#     return path
-
-
-# def create_route_test_suite(output_dir: str = "test_routes") -> List[str]:
-#     """Create a suite of test videos for all route types."""
-#     output_dir = Path(output_dir)
-#     output_dir.mkdir(exist_ok=True)
-
-#     gen = TestVideoGenerator()
-#     paths = []
-
-#     for route in ["go", "slant", "out", "in", "curl", "hitch"]:
-#         path = str(output_dir / f"{route}_route.mp4")
-#         gen.create_route_video(path, route_type=route)
-#         paths.append(path)
-
-#     return paths
-
 
 if __name__ == "__main__":
     """
