@@ -133,7 +133,7 @@ class TrajectoryVisualizer:
             trajectories = store.get_all_trajectories()
 
             if not trajectories:
-                print("                       WARNING: No trajectories to plot!")
+                print("ARNING: No trajectories to plot!")
                 ax.text(0.5, 0.5, "No trajectories", ha='center', va='center',
                        transform=ax.transAxes, fontsize=16)
             else:
@@ -153,8 +153,8 @@ class TrajectoryVisualizer:
             ax.set_aspect('equal')
 
             # Add legend
-            if trajectories:
-                ax.legend(loc='upper right')
+            # if trajectories:
+            #     ax.legend(loc='upper right')
 
             plt.tight_layout()
 
@@ -617,6 +617,7 @@ if __name__ == "__main__":
     # Run motion tracker to get real data
     test_folder = Path(__file__).parent.parent.parent.parent / "data" / "video_test"
     video_path = test_folder / "trial_vid.mp4"
+    #video_path = test_folder / "test_multi.mp4"
     output_folder = test_folder.parent / "viz_output"
     output_folder.mkdir(exist_ok=True)
 
@@ -707,113 +708,3 @@ if __name__ == "__main__":
     print(f"All visualization tests passed!")
     print(f"Outputs saved to: {output_folder}")
     print("="*60)
-
-
-# if __name__ == "__main__":
-#     """
-#     Test the visualization module.
-#     """
-#     print("\n" + "="*60)
-#     print("Testing Visualization Module")
-#     print("="*60 + "\n")
-
-#     # Create sample data
-#     print("[TEST SETUP] Creating sample trajectory data...")
-
-#     store = TrajectoryStore()
-
-#     # Create a trajectory that looks like a receiver route (out route)
-#     # Start, run straight, then break right
-#     np.random.seed(42)  # Reproducibility
-
-#     for frame in range(60):
-#         if frame < 20:
-#             # Running straight up
-#             x = 160 + np.random.normal(0, 2)
-#             y = 200 - frame * 3
-#         else:
-#             # Break right
-#             x = 160 + (frame - 20) * 4 + np.random.normal(0, 2)
-#             y = 200 - 60 + np.random.normal(0, 2)
-
-#         det = Detection(
-#             frame_id=frame,
-#             x=x - 15,
-#             y=y - 25,
-#             width=30,
-#             height=50
-#         )
-#         store.add_detection(track_id=0, detection=det)
-
-#     # Add second trajectory (curl route)
-#     for frame in range(60):
-#         if frame < 30:
-#             x = 50 + np.random.normal(0, 2)
-#             y = 200 - frame * 3
-#         else:
-#             # Curl back
-#             x = 50 + np.random.normal(0, 2)
-#             y = 200 - 90 + (frame - 30) * 1.5
-
-#         det = Detection(
-#             frame_id=frame,
-#             x=x - 15,
-#             y=y - 25,
-#             width=30,
-#             height=50
-#         )
-#         store.add_detection(track_id=1, detection=det)
-
-#     print(store.get_summary())
-
-#     # Test 1: Basic trajectory plot
-#     print("\n[TEST 1] Creating basic trajectory plot...")
-#     viz = TrajectoryVisualizer(figsize=(8, 6))
-#     viz.plot_trajectories(
-#         store,
-#         output_path="test_trajectories.png",
-#         show=False,
-#         title="Test Routes (Out + Curl)"
-#     )
-#     print("         PASSED!\n")
-
-#     # Test 2: Speed-colored plot
-#     print("[TEST 2] Creating speed-colored plot...")
-#     viz.plot_trajectories_with_speed(
-#         store,
-#         fps=30.0,
-#         output_path="test_trajectories_speed.png",
-#         show=False
-#     )
-#     print("         PASSED!\n")
-
-#     # Test 3: Speed profile
-#     print("[TEST 3] Creating speed profile...")
-#     traj = store.get_trajectory(0)
-#     viz.plot_speed_profile(
-#         traj,
-#         fps=30.0,
-#         output_path="test_speed_profile.png",
-#         show=False
-#     )
-#     print("         PASSED!\n")
-
-#     # Test 4: Comparison plot
-#     print("[TEST 4] Creating comparison plot...")
-#     viz.plot_trajectory_comparison(
-#         [store.get_trajectory(0), store.get_trajectory(1)],
-#         labels=["Out Route", "Curl Route"],
-#         output_path="test_comparison.png",
-#         show=False
-#     )
-#     print("         PASSED!\n")
-
-#     # Cleanup
-#     for f in ["test_trajectories.png", "test_trajectories_speed.png",
-#               "test_speed_profile.png", "test_comparison.png"]:
-#         Path(f).unlink(missing_ok=True)
-
-#     print("="*60)
-#     print("All Visualization tests passed!")
-#     print("="*60)
-
