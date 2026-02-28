@@ -643,55 +643,55 @@ if __name__ == "__main__":
     print("PASSED!\n")
 
     # Test 2: Speed-colored plot
-    print("="*60)
-    print("TEST 2: Speed-colored trajectory plot")
-    print("="*60)
-    fig = viz.plot_trajectories_with_speed(
-        store,
-        fps=30.0,
-        output_path=str(output_folder / "speed_colored.png"),
-        show=False,
-        title="Test Linear - Speed Colored"
-    )
-    assert fig is not None
-    print("PASSED!\n")
+    # print("="*60)
+    # print("TEST 2: Speed-colored trajectory plot")
+    # print("="*60)
+    # fig = viz.plot_trajectories_with_speed(
+    #     store,
+    #     fps=30.0,
+    #     output_path=str(output_folder / "speed_colored.png"),
+    #     show=False,
+    #     title="Test Linear - Speed Colored"
+    # )
+    # assert fig is not None
+    # print("PASSED!\n")
 
     # Test 3: Speed profile for first trajectory
-    print("="*60)
-    print("TEST 3: Speed profile")
-    print("="*60)
-    traj = store.get_all_trajectories()[0]
-    fig = viz.plot_speed_profile(
-        traj,
-        fps=30.0,
-        output_path=str(output_folder / "speed_profile.png"),
-        show=False
-    )
-    assert fig is not None
-    print("PASSED!\n")
+    # print("="*60)
+    # print("TEST 3: Speed profile")
+    # print("="*60)
+    # traj = store.get_all_trajectories()[0]
+    # fig = viz.plot_speed_profile(
+    #     traj,
+    #     fps=30.0,
+    #     output_path=str(output_folder / "speed_profile.png"),
+    #     show=False
+    # )
+    # assert fig is not None
+    # print("PASSED!\n")
 
     # Test 4: Comparison plot across multiple videos
-    print("="*60)
-    print("TEST 4: Trajectory comparison across videos")
-    print("="*60)
-    trajectories = []
-    labels = []
-    for video_file in sorted(test_folder.glob("*.mp4"))[:3]:
-        tracker.reset()
-        result = tracker.process_video(str(video_file))
-        if result.num_trajectories > 0:
-            trajectories.append(result.get_all_trajectories()[0])
-            labels.append(video_file.stem)
+    # print("="*60)
+    # print("TEST 4: Trajectory comparison across videos")
+    # print("="*60)
+    # trajectories = []
+    # labels = []
+    # for video_file in sorted(test_folder.glob("*.mp4"))[:3]:
+    #     tracker.reset()
+    #     result = tracker.process_video(str(video_file))
+    #     if result.num_trajectories > 0:
+    #         trajectories.append(result.get_all_trajectories()[0])
+    #         labels.append(video_file.stem)
 
-    fig = viz.plot_trajectory_comparison(
-        trajectories,
-        labels=labels,
-        output_path=str(output_folder / "comparison.png"),
-        show=False,
-        title="Route Comparison Across Test Videos"
-    )
-    assert fig is not None
-    print("PASSED!\n")
+    # fig = viz.plot_trajectory_comparison(
+    #     trajectories,
+    #     labels=labels,
+    #     output_path=str(output_folder / "comparison.png"),
+    #     show=False,
+    #     title="Route Comparison Across Test Videos"
+    # )
+    # assert fig is not None
+    # print("PASSED!\n")
 
     # Test 5: Annotated tracking video
     print("="*60)

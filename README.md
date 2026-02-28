@@ -1,5 +1,7 @@
 # Personal Notes 
 
+NEED TO FILL OUT PROPERLY
+
 - to run the test video generator from the root directory, run "PYTHONPATH=src python -m nfl_route_tracker.utils.test_video_generator"
   - remember to comment or uncomment the clean - up code to store test videos
 

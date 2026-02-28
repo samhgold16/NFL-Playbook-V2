@@ -23,10 +23,23 @@ class MotionTrackerConfig:
     blur_kernel_size : Size of Gaussian blur kernel applied before differencing (odd numbers)
     dilation_iterations :   Number of times to apply morphological dilation.
     """
-    threshold: int = 50
-    min_contour_area: int = 800
-    blur_kernel_size: Tuple[int, int] = (15, 15)
+    # test videos
+    # threshold: int = 25
+    # min_contour_area: int = 100
+    # blur_kernel_size: Tuple[int, int] = (7, 7)
+    # dilation_iterations: int = 2
+
+    # nfl videos
+    threshold: int = 40
+    min_contour_area: int = 700
+    blur_kernel_size: Tuple[int, int] = (17, 17)
     dilation_iterations: int = 2
+
+    # adding bounding box filter dimensions (aspect ratio - width / height, size - area)
+    min_aspect_ratio: float = 0.5
+    max_aspect_ratio: float = 1.5
+    min_area: int = 2500         
+    max_area: int = 10000       
 
     def __post_init__(self):
         """Validate configuration after initialization."""

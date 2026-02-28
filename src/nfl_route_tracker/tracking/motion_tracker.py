@@ -136,6 +136,9 @@ class MotionTracker:
             0  # sigmaX=0 means auto-calculate from kernel size
         )
 
+        # remove background
+        # blurred = ewjkfnkajwnds
+
         return blurred
 
     # comparing pixels over frames
@@ -169,6 +172,33 @@ class MotionTracker:
         dilated = cv2.dilate(thresh, kernel, iterations=self.config.dilation_iterations)
 
         return dilated
+
+    # adding another function here to define boundary box size requirements
+    def _filter_by_size(self, blob: MotionBlob) -> bool:
+        """
+        Filter detections based on expected player size and aspect ratio.
+        """
+        # calculate aspect ratio (width / height) for given area
+        if blob.height > 0:
+            aspect_ratio = blob.width / blob.height
+        else:
+            return False
+
+        # Check aspect ratio bounds, reject if outside ratio (set in config file)
+        if not (self.config.min_aspect_ratio <= aspect_ratio <= self.config.max_aspect_ratio):
+            #print("Filter Rejected")
+            return False
+
+        # Calculate bounding box area
+        bbox_area = blob.width * blob.height
+
+        # same check, for the size of bounding box
+        if not (self.config.min_area <= bbox_area <= self.config.max_area):
+            #print(f"Filter rejected")
+            return False
+
+        # All checks passed
+        return True
 
     def _find_motion_blobs(self, motion_mask: np.ndarray) -> List[MotionBlob]:
         """
@@ -218,7 +248,17 @@ class MotionTracker:
                 area=float(area),
                 contour=contour
             )
+
+            # Apply size and aspect ratio filtering (NEW)
+            if not self._filter_by_size(blob):
+                #rejected_count += 1
+                continue
+            
             blobs.append(blob)
+
+            # sanity check to see how many boxes thrown away
+            # if rejected_count > 0:
+            #     print(f"Removed {rejected_count} bounding boxes due to size/shape")
 
         return blobs
 
