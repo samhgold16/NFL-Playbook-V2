@@ -26,3 +26,5 @@
     - Should just remove the src/ path?
  
 - add another file to preprocess background, where to include? in motion_tracker, as each frame is iterated throuhg or completely separtely??? refer to notes
+
+- run `pyclean` in root directory if experiencing issues with cached data after updating files

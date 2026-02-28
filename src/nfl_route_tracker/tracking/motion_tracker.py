@@ -12,11 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # import other repo modules/packages
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from nfl_route_tracker.core.config import MotionTrackerConfig, DEFAULT_MOTION_CONFIG
-from nfl_route_tracker.tracking.trajectory import Detection, Trajectory, TrajectoryStore
+from nfl_route_tracker.tracking.trajectory import Detection, TrajectoryStore
+from nfl_route_tracker.core.video_loader import VideoLoader
 
 @dataclass
 class MotionBlob:
@@ -35,7 +33,7 @@ class MotionBlob:
 
 class MotionTracker:
     """
-    Detects and tracks moving objects using temporal frame differencing (opencv).
+    Detects and tracks moving objects using temporal pixel frame differencing (opencv).
     """
 
     def __init__(self, config: Optional[MotionTrackerConfig] = None):
@@ -62,10 +60,13 @@ class MotionTracker:
         self._active_tracks = {}
 
     ###### TRYING SOMETHING HERE
+
     ###### TRYING SOMETHING HERE
+
+    # this deals with greyscale representations, can we incorporate color?
     def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
         """
-        Prepare a frame for motion detection.
+        Prepare a frame for motion detection (greyscale, gaussian blur).
         -----------
         """
         # Convert to grayscale if color
@@ -75,18 +76,14 @@ class MotionTracker:
             gray = frame.copy()
 
         # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(
-            gray,
-            self.config.blur_kernel_size,
-            0  # sigmaX=0 means auto-calculate from kernel size
-        )
+        blurred = cv2.GaussianBlur(gray, self.config.blur_kernel_size, 0)
 
         # this would be the place to insert code to remove background
         # blurred = ewjkfnkajwnds
 
         return blurred
 
-    # comparing pixels over frames
+    # comparing pixels over individual frames
     def _compute_motion_mask(self, prev_frame: np.ndarray, curr_frame: np.ndarray) -> np.ndarray:
         """
         Compute binary motion mask between two frames.
@@ -95,12 +92,13 @@ class MotionTracker:
         # compute absolute difference
         diff = cv2.absdiff(prev_frame, curr_frame)
 
-        # threshold to create binary mask
+        # threshold to create binary mask, (min_threshold, 255)
         _, thresh = cv2.threshold(diff, self.config.threshold, 255, cv2.THRESH_BINARY)
 
         # apply morphological dilation, fill gaps in motion regions
         kernel = np.ones((5, 5), np.uint8)  
-        dilated = cv2.dilate(thresh, kernel, iterations=self.config.dilation_iterations)
+        # use dilation val (odd) from config.py
+        dilated = cv2.dilate(thresh, kernel, iterations = self.config.dilation_iterations)
 
         return dilated
 
@@ -117,7 +115,6 @@ class MotionTracker:
 
         # Check aspect ratio bounds, reject if outside ratio (set in config file)
         if not (self.config.min_aspect_ratio <= aspect_ratio <= self.config.max_aspect_ratio):
-            #print("Filter Rejected")
             return False
 
         # Calculate bounding box area
@@ -125,28 +122,18 @@ class MotionTracker:
 
         # same check, for the size of bounding box
         if not (self.config.min_area <= bbox_area <= self.config.max_area):
-            #print(f"Filter rejected")
             return False
 
         # All checks passed
         return True
 
+    # using motion max from above, using opencv contour 
     def _find_motion_blobs(self, motion_mask: np.ndarray) -> List[MotionBlob]:
         """
         Find connected regions of motion in the mask.
-
-        Parameters:
-        -----------
-        motion_mask : Binary motion mask
-
-        Returns: List of detected motion regions that pass size filtering
         """
         # Find contours (connected components)
-        contours, _ = cv2.findContours(
-            motion_mask,
-            cv2.RETR_EXTERNAL,  # Only outermost contours
-            cv2.CHAIN_APPROX_SIMPLE  # Compress contour points
-        )
+        contours, _ = cv2.findContours(motion_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE )
 
         blobs = []
         for contour in contours:
@@ -161,57 +148,43 @@ class MotionTracker:
             x, y, w, h = cv2.boundingRect(contour)
 
             # Calculate centroid using moments
-            # Moments are weighted averages of pixel positions
             M = cv2.moments(contour)
-            if M["m00"] > 0:  # Avoid division by zero
+            if M["m00"] > 0: 
                 cx = M["m10"] / M["m00"]
                 cy = M["m01"] / M["m00"]
             else:
                 cx = x + w / 2
                 cy = y + h / 2
 
-            blob = MotionBlob(
-                x=float(x),
-                y=float(y),
-                width=float(w),
-                height=float(h),
-                centroid=(cx, cy),
-                area=float(area),
-                contour=contour
-            )
+            # assign attributes to class
+            blob = MotionBlob(x = float(x), y = float(y),
+                              width = float(w), height = float(h),
+                              centroid = (cx, cy),area = float(area),
+                              contour = contour)
 
-            # Apply size and aspect ratio filtering (NEW)
+            # apply bounding box size and aspect ratio filtering
             if not self._filter_by_size(blob):
                 #rejected_count += 1
                 continue
             
             blobs.append(blob)
 
-            # sanity check to see how many boxes thrown away
-            # if rejected_count > 0:
-            #     print(f"Removed {rejected_count} bounding boxes due to size/shape")
-
         return blobs
 
-    def _associate_blobs_to_tracks(self, blobs: List[MotionBlob], max_distance: float = 50.0) -> List[Tuple[int, MotionBlob]]:
+    # change max_distance value for tracking object permanence?
+    # trial and error values
+    def _associate_blobs_to_tracks(self, blobs: List[MotionBlob]) -> List[Tuple[int, MotionBlob]]:
         """
-        Associate detected blobs with existing tracks.
-
-        The algorithm:
-        1. For each blob, find the nearest existing track
-        2. If close enough (< max_distance), assign to that track
-        3. Otherwise, create a new track
-
-        Parameters:
-        -----------
-        blobs : Detected motion blobs in current frame
-        max_distance : Maximum distance to consider a match
-
-        Returns: List[Tuple[int, MotionBlob]], List of (track_id, blob) pairs
+        Associate detected blobs with existing tracks if relevant.
+        Otherwise initialize a new track from scratch.
         """
         associations = []
         used_tracks = set()
+        
+        # setting global param
+        max_distance = self.config.max_tracking_distance
 
+        # iterate through each mask/blob
         for blob in blobs:
             best_track_id = None
             best_distance = float('inf')
@@ -246,13 +219,6 @@ class MotionTracker:
     def process_frame(self, frame: np.ndarray, frame_id: int) -> Tuple[List[Detection], np.ndarray]:
         """
         Process a single frame and return detections.
-
-        Parameters:
-        -----------
-        frame : Input frame (BGR or grayscale)
-        frame_id : Frame number (for tracking)
-
-        Returns: List of detections in this frame, Motion mask (for visualization)
         """
         # Preprocess current frame
         processed = self._preprocess_frame(frame)
@@ -260,7 +226,7 @@ class MotionTracker:
         # Handle first frame (no previous frame to compare)
         if self._prev_frame is None:
             self._prev_frame = processed
-            print(f"[MotionTracker] Frame {frame_id}: First frame, initializing")
+            print("Initializing first frame...")
             return [], np.zeros_like(processed)
 
         # Compute motion mask
@@ -275,40 +241,23 @@ class MotionTracker:
         # Convert to Detection objects
         detections = []
         for track_id, blob in associations:
-            detection = Detection(
-                frame_id=frame_id,
-                x=blob.x,
-                y=blob.y,
-                width=blob.width,
-                height=blob.height,
-                confidence=min(1.0, blob.area / 1000)  # Larger = more confident
-            )
+            detection = Detection(frame_id = frame_id, x = blob.x, y = blob.y,
+                width = blob.width, height = blob.height,
+                confidence = min(1.0, blob.area / 1000))
             detections.append((track_id, detection))
 
         # Update previous frame
         self._prev_frame = processed
-
-        # ANNOYING PRINT STATEMENTS UNCOMMENT IF DONT WANT
-        # if len(detections) > 0:
-        #     print(f"[MotionTracker] Frame {frame_id}: Found {len(detections)} objects")
 
         return detections, motion_mask
 
     def process_video(self, video_path: str, max_frames: Optional[int] = None, save_masks: bool = False) -> TrajectoryStore:
         """
         Process an entire video and extract trajectories.
-
-        Parameters:
-        -----------
-        video_path : Path to video file
-        max_frames : Maximum frames to process (for testing)
-        save_masks : bool, If True, save motion masks (for debugging)
-
-        Returns: All detected trajectories
+        By iteratively going through each frame.
         """
-        from nfl_route_tracker.core.video_loader import VideoLoader
 
-        print(f"\n[MotionTracker] Starting video processing: {video_path}")
+        print(f"\nStarting video processing: {video_path}")
         print("="*60)
 
         # Reset state for new video
@@ -328,7 +277,7 @@ class MotionTracker:
             for frame_id, frame in video:
                 # Check max frames limit
                 if max_frames and frame_id >= max_frames:
-                    print(f"[MotionTracker] Reached max_frames limit ({max_frames})")
+                    # print(f"[MotionTracker] Reached max_frames limit ({max_frames})")
                     break
 
                 # Process frame
@@ -342,13 +291,8 @@ class MotionTracker:
                 if save_masks:
                     masks.append(motion_mask.copy())
 
-                # Progress update
-                if frame_id > 0 and frame_id % 50 == 0:
-                    print(f"[MotionTracker] Progress: {frame_id}/{total} frames "
-                          f"({100*frame_id/total:.1f}%)")
-
         print("="*60)
-        print(f"[MotionTracker] Processing complete!")
+        print(f"Processing complete!")
 
         if save_masks:
             return store, masks
@@ -361,14 +305,6 @@ class MotionTracker:
 def draw_detections(frame: np.ndarray, detections: List[Tuple[int, Detection]], color: Tuple[int, int, int] = (0, 255, 0)) -> np.ndarray:
     """
     Draw detection bounding boxes on a frame.
-
-    Parameters:
-    -----------
-    frame : Frame to draw on (will be copied)
-    detections : List of (track_id, detection) pairs
-    color : BGR color for boxes
-
-    Returns: Frame with boxes drawn
     """
     output = frame.copy()
 
@@ -379,83 +315,11 @@ def draw_detections(frame: np.ndarray, detections: List[Tuple[int, Detection]], 
         cv2.rectangle(output, (x, y), (x+w, y+h), color, 2)
 
         # Draw track ID
-        cv2.putText(
-            output,
-            f"ID:{track_id}",
-            (x, y-5),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            color,
-            2
-        )
+        cv2.putText(output, f"ID:{track_id}", (x, y-5),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         # Draw center point
         cx, cy = det.center
         cv2.circle(output, (int(cx), int(cy)), 4, (0, 0, 255), -1)
 
     return output
-
-# testing 
-if __name__ == "__main__":
-    """
-    Test the MotionTracker module.
-
-    This creates a synthetic video with known motion patterns
-    and verifies the tracker can detect them.
-    """
-    print("\n" + "="*60)
-    print("Testing MotionTracker Module")
-    print("="*60 + "\n")
-
-    test_folder = Path(__file__).parent.parent.parent.parent / "data" / "video_test"
-    # change the *.mp4 here and be more specific if only want to test one or a few videos
-    video_files = list(test_folder.glob("*.mp4"))
-
-    if not video_files:
-        print(f"No video files found in {test_folder}")
-    else:
-        print("\n" + "="*60)
-        print("Testing VideoLoader on existing MP4 files")
-        print("="*60 + "\n")
-        # if test videos exist, go through each one and test video_loader
-        # for video_path in video_files:
-        # choosing one video as an example
-        video_path = video_files[3]
-        print(f"Loading video: {video_path.name}")
-
-        print("Running motion tracker...")
-        config = MotionTrackerConfig(
-            threshold=25,
-            min_contour_area=100,
-            blur_kernel_size=(5, 5))
-        
-        tracker = MotionTracker(config)
-        results = tracker.process_video(str(video_path))
-
-        print(f"\nResults: {results.num_trajectories} trajectories found")
-        # # We expect 1 trajectory (one moving object)
-        # assert results.num_trajectories >= 1, "Expected at least 1 trajectory"
-        # print("         PASSED!\n")
-
-        # Verify trajectory makes sense
-        print("Verifying trajectory quality...")
-        traj = results.get_all_trajectories()[0]
-        frames, xs, ys = traj.get_path()
-
-        print(f"Trajectory length: {len(traj)} detections")
-        print(f"X range: {xs.min():.1f} to {xs.max():.1f}")
-        print(f"Total distance: {traj.get_total_distance():.1f} pixels")
-
-        # # Object should be moving right (X increasing)
-        # assert xs[-1] > xs[0], "Expected X to increase (moving right)"
-        # Should have many detections
-        assert len(traj) > 30, f"Expected >30 detections, got {len(traj)}"
-        print("PASSED!\n")
-
-        # testing with masks
-        print("Running with motion mask output...")
-        tracker.reset()
-        results, masks = tracker.process_video(str(video_path), max_frames=30, save_masks=True)
-        print(f"Got {len(masks)} motion masks")
-        assert len(masks) == 30
-        print("PASSED!\n")

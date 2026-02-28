@@ -22,18 +22,21 @@ class MotionTrackerConfig:
     min_contour_area : Minimum pixel area for a detected region to be considered a "moving object".
     blur_kernel_size : Size of Gaussian blur kernel applied before differencing (odd numbers)
     dilation_iterations :   Number of times to apply morphological dilation.
+    max_tracking_distance : How easy it is for movement to be "remembered" for a given trajectory
     """
     # test videos
     # threshold: int = 25
     # min_contour_area: int = 100
     # blur_kernel_size: Tuple[int, int] = (7, 7)
     # dilation_iterations: int = 2
+    # max_tracking_distance: float = 50.0
 
     # nfl videos
     threshold: int = 40
     min_contour_area: int = 700
     blur_kernel_size: Tuple[int, int] = (17, 17)
     dilation_iterations: int = 2
+    max_tracking_distance: float = 100.0
 
     # adding bounding box filter dimensions (aspect ratio - width / height, size - area)
     min_aspect_ratio: float = 0.5
