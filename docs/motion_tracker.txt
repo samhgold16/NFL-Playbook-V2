@@ -1,4 +1,6 @@
 PYTHONPATH=src python -m nfl_route_tracker.tracking.motion_tracker
+python -m src.nfl_route_tracker.utils.tracking.motion_tracker
+
 
 ((.venv) ) (base) MacBook-Air-1666:NFL Playbook adamgold$ PYTHONPATH=src python -m nfl_route_tracker.tracking.motion_tracker
 <frozen runpy>:128: RuntimeWarning: 'nfl_route_tracker.tracking.motion_tracker' found in sys.modules after import of package 'nfl_route_tracker.tracking', but prior to execution of 'nfl_route_tracker.tracking.motion_tracker'; this may result in unpredictable behaviour

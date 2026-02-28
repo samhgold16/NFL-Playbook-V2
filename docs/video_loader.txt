@@ -1,6 +1,6 @@
 # OUTPUT FOR TESTING THE VIDEO_LOADER.PY FILE --> USES TEST VIDEOS FROM TEST_VIDEO_GENERATOR
 
-((.venv) ) (base) MacBook-Air-1666:NFL Playbook adamgold$ PYTHONPATH=src python -m nfl_route_tracker.core.video_loader
+python -m src.nfl_route_tracker.core.video_loader
 
 ============================================================
 Testing VideoLoader Module

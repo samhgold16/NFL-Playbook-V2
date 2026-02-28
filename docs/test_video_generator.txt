@@ -1,6 +1,7 @@
 # OUTPUT FOR TESTING THE TEST_VIDEO_GENERATOR.PY FILE 
 
-((.venv) ) (base) MacBook-Air-1666:NFL Playbook adamgold$ PYTHONPATH=src python -m nfl_route_tracker.utils.test_video_generator
+PYTHONPATH=src python -m nfl_route_tracker.utils.test_video_generator
+python -m src.nfl_route_tracker.utils.test_video_generator
 
 ============================================================
 Testing TestVideoGenerator Module

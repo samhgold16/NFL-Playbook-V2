@@ -2,29 +2,16 @@
 NFL Route Tracker - Motion Tracker Module
 ==========================================
 
-Implements motion detection using temporal image differencing (frame differencing).
-
-Author: Sam Gold
-Phase: 1 - Foundation
-
-The process:
-1. Convert frames to grayscale (simplifies comparison)
-2. Apply Gaussian blur (reduces noise)
-3. Compute absolute difference between frames
-4. Threshold the difference (binary: motion or no motion)
-5. Apply morphological operations (clean up noise, fill gaps)
-6. Find contours (connected regions of motion)
-7. Filter contours by size (remove noise)
-8. Extract object positions from valid contours
+Implements motion detection using temporal image differencing (frame differencing) with openCV.
 """
-
+# important packages
 import cv2
 import numpy as np
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 from pathlib import Path
 
-# Import our modules
+# import other repo modules/packages
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -35,18 +22,9 @@ from nfl_route_tracker.tracking.trajectory import Detection, Trajectory, Traject
 class MotionBlob:
     """
     Represents a detected region of motion in a single frame.
-
-    This is the raw output from motion detection before we try to
-    associate it with tracked objects across frames.
-
-    Attributes:
-    -----------
-    x, y : Top-left corner of bounding box
-    width, height : Size of bounding box
-    centroid : Center of mass of the contour (more precise than box center)
-    area : Pixel area of the contour (not the bounding box)
-    contour : The actual contour points (for visualization)
+    This is the raw output from motion detection of the bounding boxes' attributes.
     """
+
     x: float
     y: float
     width: float
@@ -57,53 +35,24 @@ class MotionBlob:
 
 class MotionTracker:
     """
-    Detects and tracks moving objects using temporal frame differencing.
-
-    How to Use:
-    -----------
-    ```python
-    # Create tracker with custom config
-    config = MotionTrackerConfig(threshold=30, min_contour_area=150)
-    tracker = MotionTracker(config)
-
-    # Process video
-    results = tracker.process_video("my_video.mp4")
-
-    # Analyze results
-    print(results.get_summary())
-
-    # Save for later
-    results.save("tracking_results.json")
-    ```
+    Detects and tracks moving objects using temporal frame differencing (opencv).
     """
 
     def __init__(self, config: Optional[MotionTrackerConfig] = None):
         """
-        Initialize the motion tracker.
-
-        Parameters:
-        -----------
-        config : MotionTrackerConfig, Configuration settings. If None, uses defaults.
+        Initialize the motion tracker with core attributes (or use global set)
         """
+        # inheriting from congif file of MotionTrackerConfig()
         self.config = config or DEFAULT_MOTION_CONFIG
 
         # Store previous frame for differencing
         self._prev_frame: Optional[np.ndarray] = None
 
         # For simple tracking: associate blobs across frames
-        # This is a VERY simple tracker - we'll improve in Phase 2
         self._next_track_id: int = 0
-        self._active_tracks: Dict[int, Tuple[float, float]] = {}  # id -> last position
+        self._active_tracks: Dict[int, Tuple[float, float]] = {} 
 
-        # ADDING AS A TRIAL, SEPARATE FROM ORIGINAL, DELETE IF BROKEN
-        # self._bg_subtractor = cv2.createBackgroundSubtractorMOG2(
-        #     history=500,        # how many frames to build background model from
-        #     varThreshold=80,    # sensitivity - higher = less sensitive to change
-        #     detectShadows=False # shadows would create extra detections
-        # )
-
-        print("[MotionTracker] Initialized")
-        print(f"Config: {self.config}")
+        print(f"Model Config: {self.config}")
 
     # reset tracker after video ends
     def reset(self) -> None:
@@ -111,16 +60,12 @@ class MotionTracker:
         self._prev_frame = None
         self._next_track_id = 0
         self._active_tracks = {}
-        print("[MotionTracker] State reset")
 
+    ###### TRYING SOMETHING HERE
+    ###### TRYING SOMETHING HERE
     def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
         """
         Prepare a frame for motion detection.
-
-        -----------
-        frame : Input frame (BGR or grayscale)
-
-        Returns: Preprocessed grayscale frame
         -----------
         """
         # Convert to grayscale if color
@@ -136,7 +81,7 @@ class MotionTracker:
             0  # sigmaX=0 means auto-calculate from kernel size
         )
 
-        # remove background
+        # this would be the place to insert code to remove background
         # blurred = ewjkfnkajwnds
 
         return blurred
@@ -145,21 +90,7 @@ class MotionTracker:
     def _compute_motion_mask(self, prev_frame: np.ndarray, curr_frame: np.ndarray) -> np.ndarray:
         """
         Compute binary motion mask between two frames.
-
-        Parameters:
-        -----------
-        prev_frame : Previous frame (preprocessed)
-        curr_frame : Current frame (preprocessed)
-
-        Returns: Binary mask (255 where motion detected, 0 elsewhere)
-        -----------
         """
-
-        # TRIAL, DELETE IF BROKEN
-        # fg_mask = self._bg_subtractor.apply(curr_frame)
-        # kernel = np.ones((5, 5), np.uint8)
-        # dilated = cv2.dilate(fg_mask, kernel, iterations=self.config.dilation_iterations)
-        # return dilated
 
         # compute absolute difference
         diff = cv2.absdiff(prev_frame, curr_frame)
@@ -418,7 +349,6 @@ class MotionTracker:
 
         print("="*60)
         print(f"[MotionTracker] Processing complete!")
-        print(store.get_summary())
 
         if save_masks:
             return store, masks

@@ -3,10 +3,7 @@ NFL Route Tracker - Video Loader Module
 ========================================
 
 This module handles all video input/output operations. It provides a clean
-interface for loading videos, extracting frames, and managing video metadata.
-
-Author: Sam Gold
-Phase: 1 - Foundation
+interface for loading videos, extracting frames, and managing video metadata/attributes.
 """
 
 # important packages
@@ -20,16 +17,7 @@ from dataclasses import dataclass
 @dataclass
 class VideoMetadata:
     """
-    Container for video properties.
-
-    Attributes:
-    -----------
-    width : Frame width in pixels
-    height : Frame height in pixels
-    fps : Frames per second
-    total_frames : Total number of frames in video
-    duration_seconds : Video duration in seconds
-    codec : Video codec (e.g., 'mp4v', 'avc1')
+    Container storing video properties/attributes.
     """
     width: int
     height: int
@@ -49,30 +37,7 @@ class VideoMetadata:
     
 class VideoLoader:
     """
-    Handles loading and iterating over video frames.
-
-    Example Usage:
-    -------------
-    ```python
-    # Basic usage - iterate over all frames
-    with VideoLoader("my_video.mp4") as video:
-        print(video.metadata)  # See video properties
-        for frame_num, frame in video:
-            # frame is a numpy array of shape (height, width, channels)
-            process_frame(frame)
-
-    # Load as grayscale
-    with VideoLoader("my_video.mp4", grayscale=True) as video:
-        for frame_num, frame in video:
-            # frame is now (height, width) - no color channels
-            pass
-    ```
-
-    Parameters:
-    -----------
-    video_path :  Path to the video file
-    grayscale : If True, convert frames to grayscale (useful for motion detection)
-    resize : If provided, resize frames to (width, height)
+    Handles video loading and iterating over video frames.
     """
 
     def __init__(self, video_path: Union[str, Path], grayscale: bool = False, resize: Optional[Tuple[int, int]] = None):
@@ -89,17 +54,14 @@ class VideoLoader:
 
         # Track iteration state
         self._current_frame: int = 0
-
-        print(f"[VideoLoader] Initialized for: {self.video_path}")
-        print(f"Grayscale: {self.grayscale}")
-        print(f"Resize: {self.resize}")
         
     # open video and extract metadata from initialized object
     def __enter__(self) -> 'VideoLoader':
-        """Open the video file and read metadata.
-        Called when writing `with VideoLoader(...) as video:`."""
+        """
+        Open the video file and read metadata.
+        """
         
-        print(f"[VideoLoader] Opening video file...")
+        #p rint(f"Opening video file...")
 
         # Verify file exists
         if not self.video_path.exists():
@@ -114,7 +76,7 @@ class VideoLoader:
 
         # Extract metadata
         self._metadata = self._extract_metadata()
-        print(f"[VideoLoader] Successfully opened: {self._metadata}")
+        # print(f"Successfully opened: {self._metadata}")
 
         return self
 
@@ -124,13 +86,13 @@ class VideoLoader:
         Context manager exit - releases video resources.
         Always called when exiting the `with` block, ensures resources dont leak
         """
-        print(f"[VideoLoader] Releasing video resources...")
+
         if self._cap is not None:
             self._cap.release()
             self._cap = None
-        print(f"[VideoLoader] Resources released successfully")
+        print(f"Video released successfully")
 
-    # gets video attributes and store as VideoMetadata dataclass for easy access
+    # gets video attributes and store as VideoMetadata (from beginning of file) dataclass for easy access
     def _extract_metadata(self) -> VideoMetadata:
         """
         Extract video properties from OpenCV capture object after storing from initialization.
@@ -147,30 +109,23 @@ class VideoLoader:
         fourcc = int(self._cap.get(cv2.CAP_PROP_FOURCC))
         codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
 
-        # Calculate duration
+        # Calculate video duration
         duration = total_frames / fps if fps > 0 else 0
 
-        return VideoMetadata(
-            width = width,
-            height = height,
-            fps = fps,
-            total_frames = total_frames,
-            duration_seconds = duration,
-            codec = codec
-        )
+        return VideoMetadata(width = width, height = height, fps = fps, total_frames = total_frames, 
+                             duration_seconds = duration, codec = codec)
     
     # exposes the metadata from _extract_metadata in a safe, convenient way
     @property
     def metadata(self) -> VideoMetadata:
         """Access video metadata after opening the video."""
         if self._metadata is None:
-            raise RuntimeError("Video metadata not available. Use 'with VideoLoader(...) as v:' to open a video")
+            raise RuntimeError("Video metadata not available.")
         return self._metadata
     
     def __iter__(self) -> Iterator[Tuple[int, np.ndarray]]:
         """
         Make the video iterable.
-        Yields tuples of (frame_number, frame_array).
         """
         self._current_frame = 0
         return self
@@ -188,7 +143,7 @@ class VideoLoader:
 
         # Check if we got a valid frame
         if not ret or frame is None:
-            print(f"[VideoLoader] End of video reached at frame {self._current_frame}")
+            print(f"End of video reached at frame {self._current_frame}")
             raise StopIteration
 
         # Apply preprocessing
@@ -200,19 +155,15 @@ class VideoLoader:
 
         # Progress logging (every 100 frames)
         if frame_num % 100 == 0:
-            print(f"[VideoLoader] Processing frame {frame_num}/{self.metadata.total_frames}")
+            print(f"Processing frame {frame_num}/{self.metadata.total_frames}")
 
         return frame_num, frame
     
-    # optional resizing and grayscale conversion
+    # optional resizing and grayscale conversion if specified
+    # could include background preprocessing here?
     def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
         """
         Apply preprocessing to a frame (resize then greyscale).
-        Parameters:
-        -----------
-        frame : Raw BGR frame from OpenCV (shape: height, width, 3)
-
-        Returns: Preprocessed frame
         -----------
         """
         # Resize if requested
@@ -230,25 +181,17 @@ class VideoLoader:
     def get_frame(self, frame_number: int) -> np.ndarray:
         """
         Get a specific frame by number.
-        Parameters:
-        -----------
-        frame_number : Frame index (0-based)
-
-        Returns: The requested frame
-        -----------
         """
         if self._cap is None:
             raise RuntimeError("Video not opened")
 
         if not 0 <= frame_number < self.metadata.total_frames:
-            raise ValueError(
-                f"Frame {frame_number} out of range [0, {self.metadata.total_frames})"
-            )
+            raise ValueError(f"Frame {frame_number} out of range [0, {self.metadata.total_frames})")
 
-        # Seek to frame
+        # pull fame
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
 
-        # Read frame
+        # read frame
         ret, frame = self._cap.read()
 
         if not ret:
@@ -263,10 +206,9 @@ class VideoLoader:
         if self._cap is not None:
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             self._current_frame = 0
-            print("[VideoLoader] Reset to frame 0")
+            print("Reset to frame 0")
 
 if __name__ == "__main__":
-    from nfl_route_tracker.utils.test_video_generator import TestVideoGenerator, VideoConfig
     from pathlib import Path
     """
     Test the VideoLoader module.
@@ -277,7 +219,11 @@ if __name__ == "__main__":
 
     # use example videos from test_video_generator to test loading and frame iteration
     test_folder = Path(__file__).parent.parent.parent.parent / "data" / "video_test"
-    video_files = list(test_folder.glob("*.mp4"))
+
+    # can choose which videos to test
+    # use "*.mp4" to go through all tests in folder
+    video_files = list(test_folder.glob("*vid.mp4"))
+
     if not video_files:
         print(f"No video files found in {test_folder}")
     else:
@@ -286,19 +232,11 @@ if __name__ == "__main__":
         print("="*60 + "\n")
         # if test videos exist, go through each one and test video_loader
         for video_path in video_files:
-            print(f"[TEST] Loading video: {video_path.name}")
+            print(f"Loading video: {video_path.name}")
             try:
                 # Load video and print metadata
                 with VideoLoader(video_path) as video:
                     print(f"Metadata: {video.metadata}")
-
-                    # Test iteration for a few frames to ensure looping works
-                    frame_count = 0
-                    for frame_num, frame in video:
-                        frame_count += 1
-                        if frame_count >= 5: 
-                            break
-                    print(f"Successfully iterated {frame_count} frames")
 
                     # Test grayscale option
                     with VideoLoader(video_path, grayscale=True) as gray_video:
@@ -323,7 +261,6 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"FAILED: {e}\n")
                 
-
     print("="*60)
     print("All VideoLoader tests passed!")
     print("="*60)

@@ -41,6 +41,7 @@ class MotionTrackerConfig:
     min_area: int = 2500         
     max_area: int = 10000       
 
+    # ensuring inputs are within allowed boudns
     def __post_init__(self):
         """Validate configuration after initialization."""
         # Ensure blur kernel is odd (OpenCV requirement)
@@ -50,13 +51,6 @@ class MotionTrackerConfig:
         # Ensure threshold is in valid range
         if not 0 <= self.threshold <= 255:
             raise ValueError("Threshold must be between 0 and 255")
-
-        # can probably delete, will output when initializing a motion tracker object
-        # print(f"[CONFIG] MotionTrackerConfig initialized:")
-        # print(f"Threshold: {self.threshold}")
-        # print(f"Min contour area: {self.min_contour_area} pixels")
-        # print(f"Blur kernel: {self.blur_kernel_size}")
-        # print(f"Dilation iterations: {self.dilation_iterations}")
 
 
 # defining nfl field, used later

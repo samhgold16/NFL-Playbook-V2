@@ -1,4 +1,4 @@
-PYTHONPATH=src python -m nfl_route_tracker.visualizations.visualizer
+python -m src.nfl_route_tracker.visualizations.visualizer
 
 ((.venv) ) (base) MacBook-Air-1666:NFL Playbook adamgold$ PYTHONPATH=src python -m nfl_route_tracker.visualizations.visualizer
 <frozen runpy>:128: RuntimeWarning: 'nfl_route_tracker.visualizations.visualizer' found in sys.modules after import of package 'nfl_route_tracker.visualizations', but prior to execution of 'nfl_route_tracker.visualizations.visualizer'; this may result in unpredictable behaviour

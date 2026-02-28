@@ -4,12 +4,9 @@ NFL Route Tracker - Trajectory Module
 
 This module handles the storage and analysis of object trajectories.
 A trajectory is simply a sequence of positions over time.
-
-Author: Sam Gold
-Phase: 1 - Foundation
-
 """
 
+# important packages
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional
@@ -22,25 +19,12 @@ import pandas as pd
 @dataclass
 class Detection:
     """
-    A single detection of an object in one frame, represents what the motion detector found at one moment in time.
-
-    Attributes:
-    -----------
-    frame_id : Which frame this detection is from (0-indexed)
-    x : X coordinate (horizontal position in pixels)
-    y : Y coordinate (vertical position in pixels)
-    width : Width of the detected region (bounding box)
-    height : Height of the detected region (bounding box)
-    confidence : How confident we are this is a real object (0.0 to 1.0)
-
-    Properties:
-    -----------
-    center : Center point of the detection (convenience method)
-    area : Area of the bounding box
+    A single detection of an object in ONE frame.
+    Represents what the motion detector found at one moment in time.
     """
     frame_id: int
-    x: float  # Top-left X
-    y: float  # Top-left Y
+    x: float  
+    y: float 
     width: float
     height: float
     confidence: float = 1.0
@@ -59,14 +43,12 @@ class Detection:
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
-        return {
-            'frame_id': self.frame_id,
-            'x': self.x,
-            'y': self.y,
-            'width': self.width,
-            'height': self.height,
-            'confidence': self.confidence
-        }
+        return {'frame_id': self.frame_id,
+                'x': self.x,
+                'y': self.y,
+                'width': self.width,
+                'height': self.height,
+                'confidence': self.confidence}
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Detection':
@@ -77,24 +59,11 @@ class Detection:
 @dataclass
 class Trajectory:
     """
-    A sequence of detections for a single tracked object.
-
-    Attributes:
-    -----------
-    track_id :  Unique identifier for this trajectory
-    detections : Ordered list of detections (by frame_id)
-    metadata :  Additional info (e.g., team, position, player name)
-
-    Key Methods:
-    ------------
-    add_detection() : Add a new detection to the trajectory
-    get_path() : Get just the (x, y) coordinates as arrays
-    get_velocities() : Compute instantaneous velocities
-    get_total_distance() : Total distance traveled
+    A sequence of detections for a single tracked object to convert frame analysis to video.
     """
     track_id: int
-    detections: List[Detection] = field(default_factory=list)
-    metadata: Dict = field(default_factory=dict)
+    detections: List[Detection] = field(default_factory = list)
+    metadata: Dict = field(default_factory = dict)
 
     def add_detection(self, detection: Detection) -> None:
         """
@@ -102,7 +71,7 @@ class Trajectory:
         """
         self.detections.append(detection)
         # Keep sorted by frame_id
-        self.detections.sort(key=lambda d: d.frame_id)
+        self.detections.sort(key = lambda d: d.frame_id)
 
         # if len(self.detections) % 10 == 0:
         #     print(f"[Trajectory {self.track_id}] Now has {len(self.detections)} detections")
@@ -110,36 +79,22 @@ class Trajectory:
     def get_path(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Extract the path as coordinate arrays.
-
-        Returns:
-        --------
-        Tuple of (frame_ids, x_coords, y_coords)
-            - frame_ids: Array of frame numbers
-            - x_coords: Array of X positions (center points)
-            - y_coords: Array of Y positions (center points)
         """
+
         if not self.detections:
             return np.array([]), np.array([]), np.array([])
 
+        # pulling attrivutes from dataclass
         frame_ids = np.array([d.frame_id for d in self.detections])
         x_coords = np.array([d.center[0] for d in self.detections])
         y_coords = np.array([d.center[1] for d in self.detections])
 
         return frame_ids, x_coords, y_coords
 
+    # getter functions for various characterstics to define trajectories
     def get_velocities(self, fps: float = 30.0) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute instantaneous velocities.
-
-        Parameters:
-        -----------
-        fps : Frames per second of the source video
-
-        Returns:
-        --------
-        Tuple of (vx, vy)
-            - vx: X velocities (pixels per second)
-            - vy: Y velocities (pixels per second)
         """
         frame_ids, x_coords, y_coords = self.get_path()
 
@@ -147,7 +102,7 @@ class Trajectory:
             return np.array([]), np.array([])
 
         # Time difference between frames
-        dt = np.diff(frame_ids) / fps  # Convert frame diff to seconds
+        dt = np.diff(frame_ids) / fps 
 
         # Position differences
         dx = np.diff(x_coords)
@@ -159,6 +114,7 @@ class Trajectory:
 
         return vx, vy
 
+    # takes from velocity calc and converts to speed
     def get_speeds(self, fps: float = 30.0) -> np.ndarray:
         """
         Compute instantaneous speeds (magnitude of velocity).
@@ -187,6 +143,7 @@ class Trajectory:
 
         return float(np.sum(distances))
 
+    # euclidian distance
     def get_displacement(self) -> float:
         """
         Compute displacement (straight-line distance from start to end).
@@ -213,19 +170,14 @@ class Trajectory:
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
-        return {
-            'track_id': self.track_id,
-            'detections': [d.to_dict() for d in self.detections],
-            'metadata': self.metadata
-        }
+        return {'track_id': self.track_id,
+                'detections': [d.to_dict() for d in self.detections],
+                'metadata': self.metadata}
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Trajectory':
         """Create Trajectory from dictionary."""
-        trajectory = cls(
-            track_id=data['track_id'],
-            metadata=data.get('metadata', {})
-        )
+        trajectory = cls(track_id = data['track_id'], metadata = data.get('metadata', {}))
         trajectory.detections = [Detection.from_dict(d) for d in data['detections']]
         return trajectory
 
@@ -233,26 +185,6 @@ class Trajectory:
 class TrajectoryStore:
     """
     Manages and stores multiple trajectories.
-
-    Example Usage:
-    -------------
-    ```python
-    store = TrajectoryStore()
-
-    # Add detections
-    store.add_detection(track_id=1, detection=Detection(...))
-    store.add_detection(track_id=2, detection=Detection(...))
-
-    # Get a specific trajectory
-    traj = store.get_trajectory(1)
-    print(f"Player 1 traveled {traj.get_total_distance()} pixels")
-
-    # Save results
-    store.save("tracking_results.json")
-
-    # Load later
-    store = TrajectoryStore.load("tracking_results.json")
-    ```
     """
 
     def __init__(self):
@@ -263,16 +195,9 @@ class TrajectoryStore:
         # Track some statistics
         self._total_detections: int = 0
 
-        print("[TrajectoryStore] Initialized empty store")
-
     def add_detection(self, track_id: int, detection: Detection) -> None:
         """
         Add a detection to a trajectory.
-
-        Parameters:
-        -----------
-        track_id : Which object this detection belongs to
-        detection : The detection to add
         """
         # Create trajectory if needed
         if track_id not in self._trajectories:
@@ -283,6 +208,7 @@ class TrajectoryStore:
         self._trajectories[track_id].add_detection(detection)
         self._total_detections += 1
 
+    # can prolly be used later to map track_id to player id/name, when finalized
     def get_trajectory(self, track_id: int) -> Optional[Trajectory]:
         """Get a trajectory by ID, or None if not found."""
         return self._trajectories.get(track_id)
@@ -305,7 +231,7 @@ class TrajectoryStore:
 
     @property
     def num_trajectories(self) -> int:
-        """Number of unique trajectories."""
+        """Number of unique trajectories in a video (should be 22 (or less))"""
         return len(self._trajectories)
 
     @property
@@ -313,84 +239,46 @@ class TrajectoryStore:
         """Total number of detections across all trajectories."""
         return self._total_detections
 
-    def get_summary(self) -> str:
-        """Get a summary of the stored data."""
-        lines = [f"TrajectoryStore Summary:",
-                 f"  - Total trajectories: {self.num_trajectories}",
-                 f"  - Total detections: {self.total_detections}",
-                 f"  - Per-trajectory stats:"
-        ]
-        for track_id, traj in sorted(self._trajectories.items()):
-            start, end = traj.get_frame_range()
-            lines.append(
-                f"    Track {track_id}: {len(traj)} detections, "
-                f"frames {start}-{end}, "
-                f"distance: {traj.get_total_distance():.1f}px"
-            )
-        return "\n".join(lines)
-
     def to_dataframe(self):
         """
-        Convert to pandas DataFrame.
-
-        Each row is one detection.
-        Columns: track_id, frame_id, x, y, width, height, confidence, center_x, center_y
-
-        Requires pandas to be installed.
+        Convert to pandas DataFrame where row represents one detection per frame
         """
 
         rows = []
         for traj in self._trajectories.values():
             for det in traj.detections:
                 cx, cy = det.center
-                rows.append({
-                    'track_id': traj.track_id,
-                    'frame_id': det.frame_id,
-                    'x': det.x,
-                    'y': det.y,
-                    'width': det.width,
-                    'height': det.height,
-                    'confidence': det.confidence,
-                    'center_x': cx,
-                    'center_y': cy
-                })
+                rows.append({'track_id': traj.track_id,
+                             'frame_id': det.frame_id,
+                             'x': det.x,
+                             'y': det.y,
+                             'width': det.width,
+                             'height': det.height,
+                             'confidence': det.confidence,
+                             'center_x': cx,
+                             'center_y': cy})
 
         return pd.DataFrame(rows)
 
     def save(self, filepath: str) -> None:
         """
         Save to JSON file.
-
-        Parameters:
-        -----------
-        filepath : str
-            Where to save the file
         """
         filepath = Path(filepath)
 
-        data = {
-            'trajectories': [t.to_dict() for t in self._trajectories.values()],
-            'metadata': {
-                'num_trajectories': self.num_trajectories,
-                'total_detections': self.total_detections
-            }
-        }
+        data = {'trajectories': [t.to_dict() for t in self._trajectories.values()],
+                'metadata': {'num_trajectories': self.num_trajectories,
+                             'total_detections': self.total_detections}}
 
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=2)
 
-        print(f"[TrajectoryStore] Saved to {filepath}")
+        print(f"Saved to {filepath}")
 
     @classmethod
     def load(cls, filepath: str) -> 'TrajectoryStore':
         """
-        Load from JSON file.
-
-        Parameters:
-        -----------
-        filepath : File to load
-
-        Returns: Loaded store with all trajectories
+        Load all trajectories from JSON file.
         """
         filepath = Path(filepath)
 
@@ -403,8 +291,8 @@ class TrajectoryStore:
             store._trajectories[traj.track_id] = traj
             store._total_detections += len(traj.detections)
 
-        print(f"[TrajectoryStore] Loaded from {filepath}")
-        print(f"                  {store.num_trajectories} trajectories, "
+        print(f"JSON File loaded from {filepath}")
+        print(f"{store.num_trajectories} trajectories, "
               f"{store.total_detections} detections")
 
         return store
@@ -421,58 +309,48 @@ if __name__ == "__main__":
 
     # Point to your test videos
     test_folder = Path(__file__).parent.parent.parent.parent / "data" / "video_test"
-    video_path = test_folder / "test_linear.mp4"
+
+    # specifiy test video here
+    video_path = test_folder / "trial_vid.mp4"
 
     if not video_path.exists():
         print(f"Video not found: {video_path}")
     else:
-        # Run motion tracker to get real detections
-        config = MotionTrackerConfig(threshold=25, min_contour_area=100, blur_kernel_size=(5, 5))
+        # Run motion tracker to get real detections, using global reslts
+        config = MotionTrackerConfig()
         tracker = MotionTracker(config)
         store = tracker.process_video(str(video_path))
 
         print("\n" + "="*60)
-        print("TEST 1: TrajectoryStore populated correctly")
+        print("TrajectoryStore populated correctly")
         print("="*60)
         assert store.num_trajectories >= 1, "Expected at least 1 trajectory"
-        print(store.get_summary())
         print("PASSED!\n")
 
-        # Grab the first trajectory for detailed tests
+        # Grab the first trajectory for additional tests
         traj = store.get_all_trajectories()[0]
 
         print("="*60)
-        print("TEST 2: get_path() returns valid coordinate arrays")
+        print("Getter functions")
         print("="*60)
-        frames, xs, ys = traj.get_path()
-        print(f"Frame range: {frames[0]} to {frames[-1]}")
-        print(f"X range: {xs.min():.1f} to {xs.max():.1f}")
-        print(f"Y range: {ys.min():.1f} to {ys.max():.1f}")
-        assert len(frames) == len(xs) == len(ys), "Array lengths should match"
-        assert len(frames) > 0, "Should have at least one detection"
-        print("PASSED!\n")
 
-        print("="*60)
-        print("TEST 3: get_total_distance() vs get_displacement()")
-        print("="*60)
         distance = traj.get_total_distance()
         displacement = traj.get_displacement()
         print(f"Total distance traveled: {distance:.1f} pixels")
         print(f"Straight-line displacement: {displacement:.1f} pixels")
-        assert distance >= displacement, "Distance should always be >= displacement"
-        print("PASSED!\n")
 
-        print("="*60)
-        print("TEST 4: get_speeds() returns valid values")
-        print("="*60)
-        speeds = traj.get_speeds(fps=30.0)
+        speeds = traj.get_speeds(fps = 30.0)
+        vel_x, vel_y = traj.get_velocities(fps = 30.0)
         print(f"Average speed: {speeds.mean():.1f} px/sec")
-        print(f"Max speed: {speeds.max():.1f} px/sec")
+        print(f"Average X Velocity: {vel_x.mean():.1f} px/sec")
+        print(f"Average Y Velocity: {vel_y.mean():.1f} px/sec")
+
+        assert distance >= displacement, "Distance should always be >= displacement"
         assert (speeds >= 0).all(), "Speeds should never be negative"
         print("PASSED!\n")
 
         print("="*60)
-        print("TEST 5: Save and load round-trip")
+        print("Save and load round-trip")
         print("="*60)
         test_file = Path("test_trajectories_real.json")
         store.save(str(test_file))
@@ -483,7 +361,7 @@ if __name__ == "__main__":
         print("PASSED!\n")
 
         print("="*60)
-        print("TEST 6: Convert to DataFrame")
+        print("Convert to DataFrame")
         print("="*60)
         df = store.to_dataframe()
         print(f"DataFrame shape: {df.shape}")
