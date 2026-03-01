@@ -2,7 +2,7 @@
 
 ## CURRENT PROGRESS
 
-![tracked_output-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/070bcdc7-a8d2-45db-a7f8-23d5f0f576d9)
+![tracked_output-ezgif com-video-to-gif-converter (1)](https://github.com/user-attachments/assets/1ac16c65-2a76-4c6d-adad-869677f42cd5)
 
 # Installation Steps
 
