@@ -59,26 +59,24 @@ class MotionTracker:
         self._next_track_id = 0
         self._active_tracks = {}
 
-    ###### TRYING SOMETHING HERE
-
-    ###### TRYING SOMETHING HERE
-
     # this deals with greyscale representations, can we incorporate color?
     def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
         """
-        Prepare a frame for motion detection (greyscale, gaussian blur).
+        Prepare a frame for motion detection (hue/saturation, gaussian blur).
         -----------
         """
         # Convert to grayscale if color
         if len(frame.shape) == 3:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            hs_only = hsv[:, :, :2]
         else:
-            gray = frame.copy()
+            # greyscale fallback 
+            hs_only = np.stack([frame, frame], axis=-1)
 
         # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, self.config.blur_kernel_size, 0)
+        blurred = cv2.GaussianBlur(hs_only, self.config.blur_kernel_size, 0)
 
-        # this would be the place to insert code to remove background
+        # this would be the place to insert code to remove background potentially
         # blurred = ewjkfnkajwnds
 
         return blurred
@@ -91,6 +89,10 @@ class MotionTracker:
 
         # compute absolute difference
         diff = cv2.absdiff(prev_frame, curr_frame)
+
+        # collapse to single channelf or .threshold
+        if len(diff.shape) == 3:
+            diff = np.max(diff, axis=2).astype(np.uint8)
 
         # threshold to create binary mask, (min_threshold, 255)
         _, thresh = cv2.threshold(diff, self.config.threshold, 255, cv2.THRESH_BINARY)

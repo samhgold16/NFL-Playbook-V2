@@ -145,7 +145,7 @@ def create_tracking_video(video_path: str, store: TrajectoryStore, output_path: 
                     # Draw box
                     x, y = int(det.x), int(det.y)
                     w, h = int(det.width), int(det.height)
-                    color = (255, 0, 0)  
+                    color = (180, 50, 60)  
 
                     cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
                     cv2.putText(frame, f"ID:{track_id}",

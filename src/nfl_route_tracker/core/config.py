@@ -32,9 +32,9 @@ class MotionTrackerConfig:
     # max_tracking_distance: float = 50.0
 
     # nfl videos
-    threshold: int = 40
-    min_contour_area: int = 700
-    blur_kernel_size: Tuple[int, int] = (17, 17)
+    threshold: int = 30
+    min_contour_area: int = 900
+    blur_kernel_size: Tuple[int, int] = (13, 13)
     dilation_iterations: int = 2
     max_tracking_distance: float = 100.0
 
