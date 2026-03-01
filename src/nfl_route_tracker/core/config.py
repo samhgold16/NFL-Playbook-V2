@@ -32,17 +32,18 @@ class MotionTrackerConfig:
     # max_tracking_distance: float = 50.0
 
     # nfl videos
-    threshold: int = 30
+    threshold: int = 40
     min_contour_area: int = 900
-    blur_kernel_size: Tuple[int, int] = (13, 13)
+    blur_kernel_size: Tuple[int, int] = (15, 15)
     dilation_iterations: int = 2
-    max_tracking_distance: float = 100.0
+
+    max_tracking_distance: float = 250.0
 
     # adding bounding box filter dimensions (aspect ratio - width / height, size - area)
     min_aspect_ratio: float = 0.5
     max_aspect_ratio: float = 1.5
     min_area: int = 2500         
-    max_area: int = 10000       
+    max_area: int = 12500       
 
     # ensuring inputs are within allowed boudns
     def __post_init__(self):

@@ -29,7 +29,7 @@ def run_pipeline():
     # Paths (exactly as you specified)
     test_folder = Path(__file__).parent.parent / "data" / "video_test"
     # change video here for testing
-    video_path = test_folder / "trial_vid.mp4"
+    video_path = test_folder / "trial_vid2.mp4"
     output_folder = test_folder.parent / "viz_output"
     output_folder.mkdir(exist_ok = True)
     

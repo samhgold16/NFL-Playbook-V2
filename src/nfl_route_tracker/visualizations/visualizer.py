@@ -147,10 +147,10 @@ def create_tracking_video(video_path: str, store: TrajectoryStore, output_path: 
                     w, h = int(det.width), int(det.height)
                     color = (180, 50, 60)  
 
-                    cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), color, 4)
                     cv2.putText(frame, f"ID:{track_id}",
                                (x, y-5), cv2.FONT_HERSHEY_SIMPLEX,
-                               0.5, color, 2)
+                               0.5, color, 4)
 
                     # Draw center
                     cx, cy = det.center
