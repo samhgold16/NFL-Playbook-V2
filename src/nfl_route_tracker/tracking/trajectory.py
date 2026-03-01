@@ -181,7 +181,7 @@ class Trajectory:
         trajectory.detections = [Detection.from_dict(d) for d in data['detections']]
         return trajectory
 
-
+# takes from Trajectory class
 class TrajectoryStore:
     """
     Manages and stores multiple trajectories.

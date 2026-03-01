@@ -10,7 +10,10 @@ without hunting through multiple files.
 from dataclasses import dataclass
 from typing import Tuple
 import numpy as np
+from dataclasses import dataclass, field
+from typing import List
 
+# phase 1 global variables
 @dataclass
 class MotionTrackerConfig:
     """
@@ -24,19 +27,19 @@ class MotionTrackerConfig:
     dilation_iterations :   Number of times to apply morphological dilation.
     max_tracking_distance : How easy it is for movement to be "remembered" for a given trajectory
     """
-    # test videos
+    # better settings for simple test videos
     # threshold: int = 25
     # min_contour_area: int = 100
     # blur_kernel_size: Tuple[int, int] = (7, 7)
     # dilation_iterations: int = 2
     # max_tracking_distance: float = 50.0
 
-    # nfl videos
+    # 'tuned' settings for nfl videos
     threshold: int = 40
     min_contour_area: int = 900
     blur_kernel_size: Tuple[int, int] = (15, 15)
     dilation_iterations: int = 2
-
+    # to help with "object permamence" for associating blobs to trajectories
     max_tracking_distance: float = 250.0
 
     # adding bounding box filter dimensions (aspect ratio - width / height, size - area)
@@ -56,6 +59,38 @@ class MotionTrackerConfig:
         if not 0 <= self.threshold <= 255:
             raise ValueError("Threshold must be between 0 and 255")
 
+
+# phase 2 global variables
+# same set of attributes functioning to how config.py works
+@dataclass
+class DetectorConfig:
+    """
+    Configuration for PlayerDetector.
+
+    Attributes:
+    -----------
+    model_name : YOLO model type (...8n/8s/8m/8l/8x)
+    confidence_threshold : Confidence need to accept detection
+    classes : COCO class IDs to detect. Default [0] = person only.
+    device : Device to run on: 'auto', 'cpu', 'cuda', 'mps' 
+    imgsz : Input image size for YOLO (multiple of 32)
+
+    """
+    model_name: str = 'yolov8n.pt'  
+    confidence_threshold: float = 0.2
+    # class 0 is associated to people
+    classes: List[int] = field(default_factory = lambda: [0]) 
+    device: str = 'auto'
+    imgsz: int = 1280
+
+    # sanity checks
+    def __post_init__(self):
+        """Validate configuration."""
+        if not 0.0 <= self.confidence_threshold <= 1.0:
+            raise ValueError("confidence_threshold must be between 0 and 1")
+
+        if self.imgsz % 32 != 0:
+            raise ValueError("imgsz must be multiple of 32")
 
 # defining nfl field, used later
 @dataclass

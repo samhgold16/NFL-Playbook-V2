@@ -28,3 +28,6 @@ dist/
 # Large data (if applicable)
 data/raw/
 data/
+
+# yolo stuff
+*.pt

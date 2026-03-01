@@ -26,7 +26,7 @@ def run_pipeline():
     
     print_header("NFL Route Tracker - Phase 1 Demo")
 
-    # Paths (exactly as you specified)
+    # paths 
     test_folder = Path(__file__).parent.parent / "data" / "video_test"
     # change video here for testing
     video_path = test_folder / "trial_vid2.mp4"
