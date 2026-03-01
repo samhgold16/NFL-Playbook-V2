@@ -59,7 +59,6 @@ class MotionTrackerConfig:
         if not 0 <= self.threshold <= 255:
             raise ValueError("Threshold must be between 0 and 255")
 
-
 # phase 2 global variables
 # same set of attributes functioning to how config.py works
 @dataclass
@@ -91,6 +90,36 @@ class DetectorConfig:
 
         if self.imgsz % 32 != 0:
             raise ValueError("imgsz must be multiple of 32")
+        
+# global attributes for deepsort tracking
+@dataclass
+class TrackerConfig:
+    """
+    Configuration for DeepSORT tracker.
+
+    Attributes:
+    -----------
+    max_age : Tolerance for keeping a track aliv without detections
+    n_init : Number of consecutive detections needed to confirm a track.
+    max_iou_distance : Tolerance for how strict the matching is (0 to 1) 
+    max_cosine_distance : Maximum cosine distance for appearance matching (0.0 to 2.0).
+    nn_budget :  Maximum number of appearance features to store per track.
+    embedder : Which appearance model (mobilenet, torchreid, clip_ViT-B/32)
+    """
+    max_age: int = 60  # ~2 seconds at 30fps
+    n_init: int = 3
+    max_iou_distance: float = 0.7
+    max_cosine_distance: float = 0.3
+    nn_budget: int = 100
+    embedder: str = 'mobilenet'
+
+    def __post_init__(self):
+        """Validate configuration."""
+        if not 0.0 <= self.max_iou_distance <= 1.0:
+            raise ValueError("max_iou_distance must be between 0 and 1")
+
+        if not 0.0 <= self.max_cosine_distance <= 2.0:
+            raise ValueError("max_cosine_distance must be between 0 and 2")
 
 # defining nfl field, used later
 @dataclass

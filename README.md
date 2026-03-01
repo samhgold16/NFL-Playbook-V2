@@ -20,7 +20,7 @@
 
 *INSERT HERE*
 
-#### VideoLoader
+### VideoLoader
 
 Example usage:
 

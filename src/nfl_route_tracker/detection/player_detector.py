@@ -254,6 +254,8 @@ class PlayerDetector:
         self._total_detections = 0
         self._frames_processed = 0
 
+#########################################
+
 # Convenience function for quick detection
 def detect_players_in_frame(frame: np.ndarray, confidence: float = 0.25, model: str = 'yolov8n.pt') -> List[DetectionResult]:
     """
