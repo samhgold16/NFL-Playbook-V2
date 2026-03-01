@@ -2,7 +2,7 @@
 
 ## CURRENT PROGRESS
 
-<video src = "demo_code/demo_vid.mp4" controls />
+![tracked_output-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/070bcdc7-a8d2-45db-a7f8-23d5f0f576d9)
 
 # Installation Steps
 
