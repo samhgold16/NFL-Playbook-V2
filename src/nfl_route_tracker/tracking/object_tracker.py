@@ -56,6 +56,7 @@ class Track:
     def height(self) -> float:
         return self.bbox[3]
     
+# main class
 class ObjectTracker:
     """
     Multi-object tracker using DeepSORT to be used across video frames.
@@ -74,8 +75,6 @@ class ObjectTracker:
             from deep_sort_realtime.deepsort_tracker import DeepSort
         except ImportError:
             raise ImportError("DeepSORT not installed. Install with: pip install deep-sort-realtime")
-
-        print(f"\nInitializing DeepSORT tracker...")
 
         # Create DeepSORT tracker using specified configuration
         self.tracker = DeepSort(max_age = self.config.max_age,

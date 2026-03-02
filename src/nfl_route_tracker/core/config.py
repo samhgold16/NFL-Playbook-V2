@@ -8,7 +8,7 @@ without hunting through multiple files.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Optional
 import numpy as np
 from dataclasses import dataclass, field
 from typing import List
@@ -76,11 +76,11 @@ class DetectorConfig:
 
     """
     model_name: str = 'yolov8n.pt'  
-    confidence_threshold: float = 0.2
+    confidence_threshold: float = 0.25
     # class 0 is associated to people
     classes: List[int] = field(default_factory = lambda: [0]) 
     device: str = 'auto'
-    imgsz: int = 1280
+    imgsz: int = 960
 
     # sanity checks
     def __post_init__(self):
@@ -99,17 +99,17 @@ class TrackerConfig:
 
     Attributes:
     -----------
-    max_age : Tolerance for keeping a track aliv without detections
+    max_age : Tolerance for keeping a track alive without detections
     n_init : Number of consecutive detections needed to confirm a track.
     max_iou_distance : Tolerance for how strict the matching is (0 to 1) 
     max_cosine_distance : Maximum cosine distance for appearance matching (0.0 to 2.0).
     nn_budget :  Maximum number of appearance features to store per track.
     embedder : Which appearance model (mobilenet, torchreid, clip_ViT-B/32)
     """
-    max_age: int = 60  # ~2 seconds at 30fps
-    n_init: int = 3
-    max_iou_distance: float = 0.7
-    max_cosine_distance: float = 0.3
+    max_age: int = 30
+    n_init: int = 5
+    max_iou_distance: float = 0.4
+    max_cosine_distance: float = 0.1
     nn_budget: int = 100
     embedder: str = 'mobilenet'
 
@@ -120,6 +120,33 @@ class TrackerConfig:
 
         if not 0.0 <= self.max_cosine_distance <= 2.0:
             raise ValueError("max_cosine_distance must be between 0 and 2")
+
+# final global configuration bringing together DetectorConfig and TrackerConfig
+@dataclass
+class DetectionTrackerConfig:
+    """
+    Configuration for the unified detection + tracking pipeline.
+
+    This combines settings for both YOLO detection and DeepSORT tracking.
+
+    Attributes:
+    -----------
+    detector_config : Attributes for DetectorConfig (YOLO part)
+    tracker_config : Attributes for TrackerConfig (DeepSort part)
+    verbose : Showing progress or not
+    progress_interval : How often to print progress (every N frames).
+    """
+    detector_config: Optional[DetectorConfig] = None
+    tracker_config: Optional[TrackerConfig] = None
+    verbose: bool = True
+    progress_interval: int = 50
+
+    def __post_init__(self):
+        """Initialize with defaults if not provided."""
+        if self.detector_config is None:
+            self.detector_config = DetectorConfig()
+        if self.tracker_config is None:
+            self.tracker_config = TrackerConfig()
 
 # defining nfl field, used later
 @dataclass
