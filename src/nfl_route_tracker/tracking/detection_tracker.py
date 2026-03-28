@@ -51,6 +51,53 @@ class DetectionTracker:
         self._total_processing_time = 0.0
         self._frames_processed = 0
 
+    def _filter_detections(self, detections: List[DetectionResult]) -> List[DetectionResult]:
+        """
+        Filter detections to remove invalid sizes and shapes.
+
+        """
+        if not self.config.enable_filtering:
+            return detections
+
+        filtered = []
+
+        for det in detections:
+            # Calculate metrics
+            area = det.width * det.height
+            aspect_ratio = det.width / det.height if det.height > 0 else 0
+
+            # Check bounds
+            if area < self.config.min_area or area > self.config.max_area:
+                continue
+            if aspect_ratio < self.config.min_aspect_ratio or aspect_ratio > self.config.max_aspect_ratio:
+                continue
+
+            filtered.append(det)
+
+        return filtered
+    
+    def _apply_nms(self, detections: List[DetectionResult]) -> List[DetectionResult]:
+        """
+        Apply Non-Maximum Suppression to remove duplicate detections.
+        """
+        if not self.config.enable_filtering or len(detections) == 0:
+            return detections
+
+        # Convert to numpy for NMS
+        boxes = np.array([[d.x, d.y, d.x + d.width, d.y + d.height] for d in detections])
+        scores = np.array([d.confidence for d in detections])
+
+        # Apply NMS
+        indices = cv2.dnn.NMSBoxes(boxes.tolist(),
+                                   scores.tolist(),
+                                   score_threshold = 0.0, 
+                                   nms_threshold=self.config.nms_threshold)
+
+        if len(indices) == 0:
+            return []
+
+        return [detections[i] for i in indices.flatten()]
+
     # code to process an individual frame, use later to iterate through all frames
     def process_frame(self, frame: np.ndarray, frame_id: Optional[int] = None) -> List[Track]:
         """
@@ -60,6 +107,10 @@ class DetectionTracker:
 
         # detect players
         detections = self._detector.detect(frame)
+
+        # adding filtering logic 
+        detections = self._filter_detections(detections)
+        detections = self._apply_nms(detections)
 
         # update tracking based on detections
         tracks = self._tracker.update(frame, detections, frame_id)

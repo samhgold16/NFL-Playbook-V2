@@ -75,12 +75,12 @@ class DetectorConfig:
     imgsz : Input image size for YOLO (multiple of 32)
 
     """
-    model_name: str = 'yolov8n.pt'  
+    model_name: str = 'yolov8s.pt'  #yolov8s.pt, 8n, 
     confidence_threshold: float = 0.25
     # class 0 is associated to people
     classes: List[int] = field(default_factory = lambda: [0]) 
     device: str = 'auto'
-    imgsz: int = 960
+    imgsz: int = 1280
 
     # sanity checks
     def __post_init__(self):
@@ -107,10 +107,10 @@ class TrackerConfig:
     embedder : Which appearance model (mobilenet, torchreid, clip_ViT-B/32)
     """
     max_age: int = 30
-    n_init: int = 5
+    n_init: int = 3
     max_iou_distance: float = 0.4
-    max_cosine_distance: float = 0.1
-    nn_budget: int = 100
+    max_cosine_distance: float = 0.3
+    nn_budget: int = 1000
     embedder: str = 'mobilenet'
 
     def __post_init__(self):
@@ -140,6 +140,14 @@ class DetectionTrackerConfig:
     tracker_config: Optional[TrackerConfig] = None
     verbose: bool = True
     progress_interval: int = 50
+
+    # adding more parameters, similar to motiontrackerconfig, for bounding box logic and more
+    enable_filtering: bool = True
+    min_area: int = 2500
+    max_area: int = 10000
+    min_aspect_ratio: float = 0.25
+    max_aspect_ratio: float = 1.5
+    nms_threshold: float = 0.2
 
     def __post_init__(self):
         """Initialize with defaults if not provided."""
