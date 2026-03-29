@@ -22,15 +22,15 @@ class NFLDetectionFilterConfig:
     """
     # Area constraints (width * height in pixels)
     min_area: int = 2000
-    max_area: int = 20000
+    max_area: int = 15000
 
     # Aspect ratio constraints (width / height)
     min_aspect_ratio: float = 0.25
     max_aspect_ratio: float = 1.25
 
     # Confidence thresholds, ignore confidence below this and/or use ByteTrack association instead
-    min_confidence: float = 0.2
-    low_confidence: float = 0.1 
+    min_confidence: float = 0.25
+    low_confidence: float = 0.15
 
     # Field zone thresholds (y-position in frame)
     # All-22 camera angle: top = far, bottom = near
@@ -101,7 +101,7 @@ class DetectorConfig:
     Configuration for PlayerDetector.
     """
     model_name: str = 'yolov8m.pt'  #yolov8s.pt, 8n, 
-    confidence_threshold: float = 0.25
+    confidence_threshold: float = 0.1
     # class 0 is associated to people
     classes: List[int] = field(default_factory = lambda: [0]) 
     device: str = 'auto'
@@ -126,9 +126,9 @@ class TrackerConfig:
     Configuration for DeepSORT tracker.
     """
     max_age: int = 30 # frames to keep lost tracks alive
-    n_init: int = 3 # frames to confirm a track before outputting
-    max_iou_distance: float = 0.4 # lower = more aggressive matching, higher = more lenient matching
-    max_cosine_distance: float = 0.4 # lower = more aggressive matching, higher = more lenient matching
+    n_init: int = 1 # frames to confirm a track before outputting
+    max_iou_distance: float = 0.15 # lower = more aggressive matching, higher = more lenient matching
+    max_cosine_distance: float = 0.15 # lower = more aggressive matching, higher = more lenient matching
     nn_budget: int = 1000 # max number of features to store for each track (for appearance matching)
     embedder: str = 'mobilenet' 
 
@@ -166,7 +166,7 @@ class DetectionTrackerConfig:
     max_area: int = 10000
     min_aspect_ratio: float = 0.25
     max_aspect_ratio: float = 1.25
-    nms_threshold: float = 0.2
+    nms_threshold: float = 0.3
 
     def __post_init__(self):
         """Initialize with defaults if not provided."""
@@ -224,7 +224,7 @@ def get_default_pipeline_config() -> DetectionTrackerConfig:
                                                                    confidence_threshold = 0.2,
                                                                    imgsz = 1280),
                                   tracker_config = TrackerConfig(max_age = 50, n_init = 4,
-                                                                 max_iou_distance = 0.4, max_cosine_distance = 0.4,
+                                                                 max_iou_distance = 0.2, max_cosine_distance = 0.2,
                                                                  embedder = 'mobilenet'),
                                   nfl_filter_config = NFLDetectionFilterConfig(),
                                   temporal_config = TemporalAggregatorConfig(enabled = True,
