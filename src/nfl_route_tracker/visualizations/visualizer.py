@@ -77,9 +77,9 @@ class TrajectoryVisualizer:
             ax.grid(True, alpha = 0.3)
             ax.set_aspect('equal')
 
-            # Add legend, can show when reduced down to 2
-            # if trajectories:
-            #     ax.legend(loc = 'upper right')
+            # Add legend, can show when reduced down to 22
+            if trajectories:
+                ax.legend(loc = 'upper right')
 
             plt.tight_layout()
 
