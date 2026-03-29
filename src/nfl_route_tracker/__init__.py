@@ -32,11 +32,6 @@ from .tracking import (
     Trajectory,
     TrajectoryStore,
 
-    # Phase 1: Motion-based
-    MotionTracker,
-    MotionBlob,
-    draw_detections,
-
     # UNCOMMENT WHEN IMPLEMENT PHASE 2
     # ObjectTracker,
     # TrackerConfig,
@@ -49,15 +44,6 @@ from .tracking import (
 from .visualizations import (
     TrajectoryVisualizer,
     create_tracking_video
-)
-
-# Utility components
-from .utils import (
-    TestVideoGenerator,
-    VideoConfig,
-    MovingObject,
-    # create_simple_test_video,
-    # create_route_test_suite
 )
 
 __all__ = [
@@ -83,11 +69,6 @@ __all__ = [
     'Trajectory',
     'TrajectoryStore',
 
-    # Tracking - Phase 1
-    'MotionTracker',
-    'MotionBlob',
-    'draw_detections',
-
     # Tracking - Phase 2
     # UNCOMMENET
     # 'ObjectTracker',
@@ -99,11 +80,6 @@ __all__ = [
     # Visualization
     'TrajectoryVisualizer',
     'create_tracking_video',
-
-    # Utils
-    'TestVideoGenerator',
-    'VideoConfig',
-    'MovingObject',
     # 'create_simple_test_video',
     # 'create_route_test_suite',
 ]

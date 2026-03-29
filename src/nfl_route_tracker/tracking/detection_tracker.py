@@ -145,7 +145,20 @@ class DetectionTracker:
         # Process video
         with VideoLoader(str(video_path)) as video:
             total_frames = video.metadata.total_frames
-            # only analyze n number of frames if specified in max_frames = 
+
+            # vid_width = video.metadata.width
+            # vid_height = video.metadata.height
+            # vid_fps = video.metadata.fps
+            # vid_duration = video.metadata.duration_seconds
+            # vid_codec = video.metadata.codec
+            print(f"Video metadata: {video.metadata}")
+            # print(f"Video Width: {vid_width}")
+            # print(f"Video Height: {vid_height}")
+            # print(f"Video FPS: {vid_fps}")
+            # print(f"Video Duration: {vid_duration} seconds")
+            # print(f"Video Codec: {vid_codec}")
+
+            # only analyze n number of frames if specified in max_frames =
             if max_frames:
                 total_frames = min(total_frames, max_frames)
 
