@@ -269,32 +269,35 @@ def detect_players_in_frame(frame: np.ndarray, confidence: float = 0.25, model: 
 
     return detector.detect(frame)
 
+
+# can delete this following code????
+
 # add if __name__ == "__main__": to test file? How?
-if __name__ == "__main__":
-    # some fix
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+# if __name__ == "__main__":
+#     # some fix
+#     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-    # Paths (same relative logic as demo_v1.py)
-    test_folder = Path(__file__).parent.parent.parent.parent / "data" / "video_test"
-    video_path = test_folder / "trial_vid.mp4"
-    output_folder = test_folder.parent / "viz_output"
-    output_folder.mkdir(exist_ok = True)
+#     # Paths (same relative logic as demo_v1.py)
+#     test_folder = Path(__file__).parent.parent.parent.parent / "data" / "video_test"
+#     video_path = test_folder / "trial_vid.mp4"
+#     output_folder = test_folder.parent / "viz_output"
+#     output_folder.mkdir(exist_ok = True)
 
-    # loading video and getting just one frame to analyze simple detection
-    with VideoLoader(video_path) as loader:
-        print(loader.metadata)          
-        frame = loader.get_frame(50)
+#     # loading video and getting just one frame to analyze simple detection
+#     with VideoLoader(video_path) as loader:
+#         print(loader.metadata)          
+#         frame = loader.get_frame(50)
 
-    # using congif settings
-    config = DetectorConfig()
-    # initialize model
-    detector = PlayerDetector(config)
-    # detect for specified frame
-    detections = detector.detect(frame, verbose = True)
+#     # using congif settings
+#     config = DetectorConfig()
+#     # initialize model
+#     detector = PlayerDetector(config)
+#     # detect for specified frame
+#     detections = detector.detect(frame, verbose = True)
     
-    output_frame = detector.draw_detections(frame, detections)
-    out_path = output_folder / f"trial_vid_frame_10_detections.jpg"
-    cv2.imwrite(str(out_path), output_frame)
+#     output_frame = detector.draw_detections(frame, detections)
+#     out_path = output_folder / f"trial_vid_frame_10_detections.jpg"
+#     cv2.imwrite(str(out_path), output_frame)
     
-    print(f"Saved: {out_path}")
-    print("Stats:", detector.get_statistics())
+#     print(f"Saved: {out_path}")
+#     print("Stats:", detector.get_statistics())

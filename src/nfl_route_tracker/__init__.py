@@ -13,7 +13,6 @@ __author__ = "Sam Gold"
 from .core import (
     MotionTrackerConfig,
     NFLFieldConstants,
-    DEFAULT_MOTION_CONFIG,
     NFL_FIELD,
     VideoLoader,
     VideoMetadata
@@ -54,7 +53,6 @@ __all__ = [
     # Core
     'MotionTrackerConfig',
     'NFLFieldConstants',
-    'DEFAULT_MOTION_CONFIG',
     'NFL_FIELD',
     'VideoLoader',
     'VideoMetadata',
