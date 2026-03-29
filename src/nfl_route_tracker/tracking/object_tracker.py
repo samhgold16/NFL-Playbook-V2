@@ -33,6 +33,7 @@ class Track:
     confidence: float
     is_confirmed: bool
     time_since_update: int
+    hits: int = 0
 
     @property
     def center(self) -> Tuple[float, float]:
@@ -70,7 +71,6 @@ class ObjectTracker:
         self.config = config or TrackerConfig()
 
         # importing deepsort
-        # COME BACK HERE, BETTER TO HAVE IN PYPROJECT.TOML?????
         try:
             from deep_sort_realtime.deepsort_tracker import DeepSort
         except ImportError:
@@ -116,6 +116,9 @@ class ObjectTracker:
         # Update DeepSORT using deepsort tracking class
         raw_tracks = self.tracker.update_tracks(detection_list, frame=frame)
 
+        # Track hit counts for each track_id
+        current_track_hits = {}
+
         # Convert to Track format and store trajectories from trajectory class
         tracks = []
         for raw_track in raw_tracks:
@@ -128,6 +131,22 @@ class ObjectTracker:
             # Get bounding box (ltwh format)
             bbox = raw_track.to_ltwh()
 
+            # Calculate track age (hits) from the trajectory store
+            if track_id in self._trajectory_store._trajectories:
+                hits = len(self._trajectory_store._trajectories[track_id].detections)
+            else:
+                hits = 1
+
+            # FILTER: Skip ghost boxes - tracks that haven't been updated
+            # These are Kalman filter predictions, not actual detections
+            # time_since_update > 0 means no detection was matched to this track
+            if self.config.filter_ghost_boxes and raw_track.time_since_update > 1:
+                continue
+
+            # FILTER: Require minimum number of hits before showing track
+            if hits < self.config.min_hits:
+                continue
+
             # Track first appearance
             if track_id not in self._active_tracks:
                 self._active_tracks[track_id] = frame_id
@@ -137,14 +156,15 @@ class ObjectTracker:
             track = Track(track_id = track_id, bbox = (bbox[0], bbox[1], bbox[2], bbox[3]),
                           confidence = raw_track.det_conf if raw_track.det_conf else 0.0,
                           is_confirmed = raw_track.is_confirmed(),
-                          time_since_update=raw_track.time_since_update)
+                          time_since_update=raw_track.time_since_update,
+                          hits=hits)
 
             tracks.append(track)
 
             # Store attributes from above into trajectory class set up from trajectory.py
             detection = Detection(frame_id = frame_id, x = track.x, y = track.y,
                 width = track.width, height = track.height, confidence = track.confidence)
-            
+
             self._trajectory_store.add_detection(track_id, detection)
 
         return tracks

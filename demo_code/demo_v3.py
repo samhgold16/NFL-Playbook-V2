@@ -195,6 +195,19 @@ def main():
 
     parser.add_argument('--max-frames', type=int, default=None, help='Limit frames per video (for quick testing)')
 
+    # parser.add_argument(
+    #     '--no-ghost-filter',
+    #     action='store_true',
+    #     help='Keep ghost boxes (Kalman predictions). Default: filter them out'
+    # )
+
+    # parser.add_argument(
+    #     '--min-hits',
+    #     type=int,
+    #     default=1,
+    #     help='Minimum detections before showing a track (default: 1)'
+    # )
+
     args = parser.parse_args()
 
     # Set up paths

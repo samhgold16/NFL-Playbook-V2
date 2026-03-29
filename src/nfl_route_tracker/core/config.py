@@ -21,12 +21,12 @@ class NFLDetectionFilterConfig:
     Configuration and tuning parameters for NFL-specific detection filtering.
     """
     # Area constraints (width * height in pixels)
-    min_area: int = 2000
-    max_area: int = 15000
+    min_area: int = 500 # 2000
+    max_area: int = 17500 # 20000
 
     # Aspect ratio constraints (width / height)
     min_aspect_ratio: float = 0.25
-    max_aspect_ratio: float = 1.25
+    max_aspect_ratio: float = 1.15 # 1.25
 
     # Confidence thresholds, ignore confidence below this and/or use ByteTrack association instead
     min_confidence: float = 0.25
@@ -34,8 +34,8 @@ class NFLDetectionFilterConfig:
 
     # Field zone thresholds (y-position in frame)
     # All-22 camera angle: top = far, bottom = near
-    near_y_threshold: int = 1000
-    far_y_threshold: int = 100
+    near_y_threshold: int = 700
+    far_y_threshold: int = 300
 
     # Near players (closer to camera)
     near_area_range: Tuple[int, int] = (2500, 20000)
@@ -55,7 +55,7 @@ class NFLDetectionFilterConfig:
 
     # Overlap merging
     merge_overlaps: bool = True
-    merge_iou_threshold: float = 0.4
+    merge_iou_threshold: float = 0.35
 
     def __post_init__(self):
         """Validate configuration."""
@@ -63,8 +63,6 @@ class NFLDetectionFilterConfig:
             raise ValueError("min_area must be less than max_area")
         if self.min_aspect_ratio >= self.max_aspect_ratio:
             raise ValueError("min_aspect_ratio must be less than max_aspect_ratio")
-        if not 0.0 <= self.min_confidence <= 1.0:
-            raise ValueError("min_confidence must be between 0 and 1")
         
 # =============================================================================
 # TEMPORAL AGGREGATION CONFIG
@@ -75,10 +73,10 @@ class TemporalAggregatorConfig:
     Configuration for temporal detection aggregation, aggregating detections across multiple frames to improve stability
     """
     enabled: bool = True
-    window_size: int = 4 # Number of frames to aggregate
-    stride: int = 1  # Step size between windows (1 = every frame)
-    aggregation_method: str = 'weighted'  # 'mean', 'max', 'weighted'
-    confidence_weight: float = 0.3  # Weight for confidence in weighted aggregation
+    window_size: int = 6 # Number of frames to aggregate # 2
+    stride: int = 2  # Step size between windows (1 = every frame) # 1
+    aggregation_method: str = 'mean'  # 'mean', 'max', 'weighted'
+    confidence_weight: float = 0.6  # Weight for confidence in weighted aggregation
     min_detection_count: int = 2  # Min frames a detection must appear in
     position_threshold: float = 30.0  # Max distance to consider same detection
 
@@ -101,7 +99,7 @@ class DetectorConfig:
     Configuration for PlayerDetector.
     """
     model_name: str = 'yolov8m.pt'  #yolov8s.pt, 8n, 
-    confidence_threshold: float = 0.1
+    confidence_threshold: float = 0.1 # .1
     # class 0 is associated to people
     classes: List[int] = field(default_factory = lambda: [0]) 
     device: str = 'auto'
@@ -125,12 +123,14 @@ class TrackerConfig:
     """
     Configuration for DeepSORT tracker.
     """
-    max_age: int = 30 # frames to keep lost tracks alive
-    n_init: int = 1 # frames to confirm a track before outputting
-    max_iou_distance: float = 0.15 # lower = more aggressive matching, higher = more lenient matching
-    max_cosine_distance: float = 0.15 # lower = more aggressive matching, higher = more lenient matching
-    nn_budget: int = 1000 # max number of features to store for each track (for appearance matching)
+    max_age: int = 50 # frames to keep lost tracks alive    # 30
+    n_init: int = 2 # frames to confirm a track before outputting    # 1 
+    max_iou_distance: float = 0.2 # lower = more aggressive matching, higher = more lenient matching   # .15
+    max_cosine_distance: float = 0.8 # lower = more aggressive matching, higher = more lenient matching   # .15
+    nn_budget: int = 1000 # max number of features to store for each track (for appearance matching) # 1000
     embedder: str = 'mobilenet' 
+    filter_ghost_boxes: bool = True
+    min_hits: int = 1
 
     def __post_init__(self):
         """Validate configuration."""
@@ -185,25 +185,14 @@ class NFLFieldConstants:
     """
     Official NFL field dimensions, for homography transformation, visualization scaling, coordinate validation
     """
-    # Field dimensions
-    FIELD_LENGTH: float = 120.0  # Including both end zones
-    FIELD_WIDTH: float = 53.33   # 160 feet = 53.33 yards
-
-    # End zones
+    FIELD_LENGTH: float = 120.0
+    FIELD_WIDTH: float = 53.33
     END_ZONE_DEPTH: float = 10.0
-
-    # Playing field (excluding end zones)
     PLAYING_FIELD_LENGTH: float = 100.0
-
-    # Hash marks (distance from sideline)
-    HASH_MARK_WIDTH: float = 18.5 / 3  
-
-    # Yard line spacing
-    YARD_LINE_SPACING: float = 5.0  # Major lines every 5 yards
-
-    # Goal post dimensions (for future reference)
-    GOAL_POST_HEIGHT: float = 10.0 / 3  # 10 feet = 3.33 yards
-    CROSSBAR_WIDTH: float = 18.5 / 3    # Same as hash mark width
+    HASH_MARK_WIDTH: float = 18.5 / 3
+    YARD_LINE_SPACING: float = 5.0
+    GOAL_POST_HEIGHT: float = 10.0 / 3
+    CROSSBAR_WIDTH: float = 18.5 / 3
 
 # =============================================================================
 # DEFAULT CONFIGURATIONS
@@ -221,15 +210,15 @@ NFL_FIELD = NFLFieldConstants()
 def get_default_pipeline_config() -> DetectionTrackerConfig:
 
     return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8m.pt',
-                                                                   confidence_threshold = 0.2,
+                                                                   confidence_threshold = 0.25,
                                                                    imgsz = 1280),
-                                  tracker_config = TrackerConfig(max_age = 50, n_init = 4,
-                                                                 max_iou_distance = 0.2, max_cosine_distance = 0.2,
+                                  tracker_config = TrackerConfig(max_age = 50, n_init = 2,
+                                                                 max_iou_distance = 0.8, max_cosine_distance = .4, 
                                                                  embedder = 'mobilenet'),
                                   nfl_filter_config = NFLDetectionFilterConfig(),
-                                  temporal_config = TemporalAggregatorConfig(enabled = True,
-                                                                             window_size = 4,
-                                                                             aggregation_method = 'weighted'),
+                                  temporal_config = TemporalAggregatorConfig(enabled = True, # False ???
+                                                                             window_size = 2,
+                                                                             aggregation_method = 'max'),
                                   verbose = True,
                                   progress_interval = 50,
                                   save_video = True,
