@@ -21,41 +21,41 @@ class NFLDetectionFilterConfig:
     Configuration and tuning parameters for NFL-specific detection filtering.
     """
     # Area constraints (width * height in pixels)
-    min_area: int = 500 # 2000
-    max_area: int = 17500 # 20000
+    min_area: int = 400 # 2000
+    max_area: int = 20000 # 20000
 
     # Aspect ratio constraints (width / height)
-    min_aspect_ratio: float = 0.25
-    max_aspect_ratio: float = 1.15 # 1.25
+    min_aspect_ratio: float = 0.2
+    max_aspect_ratio: float = 1.75 # 1.25
 
     # Confidence thresholds, ignore confidence below this and/or use ByteTrack association instead
-    min_confidence: float = 0.25
-    low_confidence: float = 0.15
+    min_confidence: float = 0.15
+    low_confidence: float = 0.05
 
-    # Field zone thresholds (y-position in frame)
+    # Field zone thresholds (y-position in frame) for a 1920x984 video, with y = 984
     # All-22 camera angle: top = far, bottom = near
-    near_y_threshold: int = 700
-    far_y_threshold: int = 300
+    near_y_threshold: int = 734
+    far_y_threshold: int = 250
 
     # Near players (closer to camera)
-    near_area_range: Tuple[int, int] = (2500, 20000)
-    near_aspect_range: Tuple[float, float] = (0.35, 0.85)
+    near_area_range: Tuple[int, int] = (600, 20000) # (2500, 20000)
+    near_aspect_range: Tuple[float, float] = (.2, 1.75) # (0.35, 0.85)
 
     # Far players (further from camera)
-    far_area_range: Tuple[int, int] = (800, 8000)
-    far_aspect_range: Tuple[float, float] = (0.2, 0.6)
+    far_area_range: Tuple[int, int] = (200, 20000) # (800, 8000)
+    far_aspect_range: Tuple[float, float] = (0.2, 1.75) # (0.2, 0.6)
 
     # Mid-range players
-    mid_area_range: Tuple[int, int] = (1500, 12000)
-    mid_aspect_range: Tuple[float, float] = (0.25, 0.7)
+    mid_area_range: Tuple[int, int] = (400, 20000) # (1500, 12000)
+    mid_aspect_range: Tuple[float, float] = (0.25, 1.75) # (0.25, 0.7)
 
     # Vertical position constraints
-    min_y_position: int = 50
-    max_y_position: int = 950
+    min_y_position: int = 25 # boundaries to not consider
+    max_y_position: int = 959
 
     # Overlap merging
     merge_overlaps: bool = True
-    merge_iou_threshold: float = 0.35
+    merge_iou_threshold: float = 0.6 # .35 # CHANGE NEXT 
 
     def __post_init__(self):
         """Validate configuration."""
@@ -210,10 +210,10 @@ NFL_FIELD = NFLFieldConstants()
 def get_default_pipeline_config() -> DetectionTrackerConfig:
 
     return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8m.pt',
-                                                                   confidence_threshold = 0.25,
+                                                                   confidence_threshold = 0.15,
                                                                    imgsz = 1280),
-                                  tracker_config = TrackerConfig(max_age = 50, n_init = 2,
-                                                                 max_iou_distance = 0.8, max_cosine_distance = .4, 
+                                  tracker_config = TrackerConfig(max_age = 60, n_init = 2,
+                                                                 max_iou_distance = 0.8, max_cosine_distance = 0.5,
                                                                  embedder = 'mobilenet'),
                                   nfl_filter_config = NFLDetectionFilterConfig(),
                                   temporal_config = TemporalAggregatorConfig(enabled = True, # False ???

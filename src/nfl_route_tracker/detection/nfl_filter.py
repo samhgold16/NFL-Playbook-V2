@@ -21,38 +21,40 @@ class NFLDetectionFilter:
     """
 
     # Bounding box area constraints (width * height in pixels), depends on camera zoom
-    min_area: int = 800
+    min_area: int = 400
     max_area: int = 20000
 
     # Aspect ratio constraints (width / height)
     min_aspect_ratio: float = 0.25
-    max_aspect_ratio: float = 0.8
+    max_aspect_ratio: float = 1.75
 
     # Confidence thresholds
-    min_confidence: float = 0.25  # Below this, ignore detection
-    low_confidence: float = 0.15  # Below this, use ByteTrack association
+    min_confidence: float = 0.15  # Below this, ignore detection
+    low_confidence: float = 0.05  # Below this, use ByteTrack association
 
     # Field zone thresholds (y-position in frame)
     # All-22 camera angle: top = far, bottom = near
-    near_y_threshold: int = 700   # Players below this are "near"
-    far_y_threshold: int = 300    # Players above this are "far"
+    near_y_threshold: int = 734   # Players below this are "near"
+    far_y_threshold: int = 250    # Players above this are "far"
 
     # Near players: larger, wider (closer to camera)
-    near_area_range: Tuple[int, int] = (2500, 20000)
-    near_aspect_range: Tuple[float, float] = (0.35, 0.85)
+    near_area_range: Tuple[int, int] = (600, 20000)
+    near_aspect_range: Tuple[float, float] = (0.2, 1.75)
 
     # Far players: smaller, taller (further from camera)
-    far_area_range: Tuple[int, int] = (800, 8000)
-    far_aspect_range: Tuple[float, float] = (0.2, 0.6)
+    far_area_range: Tuple[int, int] = (200, 8000)
+    far_aspect_range: Tuple[float, float] = (0.2, 1.75)
 
     # Mid-range players
-    mid_area_range: Tuple[int, int] = (1500, 12000)
-    mid_aspect_range: Tuple[float, float] = (0.25, 0.7)
+    mid_area_range: Tuple[int, int] = (400, 12000)
+    mid_aspect_range: Tuple[float, float] = (0.25, 1.75)
 
     # Vertical position constraints (y-range in frame)
     # Players should be within these bounds
-    min_y_position: int = 50     # Too high = likely crowd/noise
-    max_y_position: int = 950     # Too low = likely camera artifact
+    min_y_position: int = 25     # Too high = likely crowd/noise
+    max_y_position: int = 959     # Too low = likely camera artifact
+
+    merge_iou_threshold: float = 0.5
 
     def filter_detections(self, detections: List[DetectionResult], frame_height: int = 984) -> List[DetectionResult]:
         """
@@ -123,6 +125,9 @@ class NFLDetectionFilter:
         """
         Handle overlapping detections by merging or suppressing them based on IOU and confidence.
         """
+        if iou_threshold is None:
+            iou_threshold = self.merge_iou_threshold
+
         if len(detections) <= 1:
             return detections
 
