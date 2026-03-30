@@ -23,12 +23,14 @@ from nfl_route_tracker.core.video_loader import VideoLoader
 from nfl_route_tracker.tracking.trajectory import TrajectoryStore
 from nfl_route_tracker.core.config import (
     TrackerConfig, DetectorConfig, DetectionTrackerConfig,
-    NFLDetectionFilterConfig, TemporalAggregatorConfig
+    NFLDetectionFilterConfig, TemporalAggregatorConfig,
+    CameraStabilizerConfig
 )
 from nfl_route_tracker.detection.player_detector import DetectionResult, PlayerDetector
 from nfl_route_tracker.tracking.object_tracker import ObjectTracker, Track
 from nfl_route_tracker.detection.nfl_filter import NFLDetectionFilter
 from nfl_route_tracker.tracking.temporal_aggregator import TemporalAggregator
+from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer
 
 # main class
 class DetectionTracker:
@@ -80,6 +82,14 @@ class DetectionTracker:
             position_threshold=self.config.temporal_config.position_threshold
         )
 
+        # Initialize camera stabilizer
+        if self.config.camera_config.enabled:
+            print("Initializing Camera Stabilizer...")
+            self._camera_stabilizer = CameraStabilizer(self.config.camera_config)
+        else:
+            self._camera_stabilizer = None
+            print("Camera Stabilizer disabled")
+
         # Initialize tracker
         print("\nInitializing DeepSORT Tracker...")
         self._tracker = ObjectTracker(self.config.tracker_config)
@@ -101,8 +111,7 @@ class DetectionTracker:
         if self.config.nfl_filter_config.merge_overlaps:
             filtered = self._nfl_filter.merge_overlapping_detections(
                 filtered,
-                iou_threshold=self.config.nfl_filter_config.merge_iou_threshold
-            )
+                iou_threshold=self.config.nfl_filter_config.merge_iou_threshold)
 
         return filtered
     
@@ -111,16 +120,13 @@ class DetectionTracker:
         if len(detections) == 0:
             return detections
 
-        boxes = np.array([[d.x, d.y, d.x + d.width, d.y + d.height]
-                          for d in detections])
+        boxes = np.array([[d.x, d.y, d.x + d.width, d.y + d.height] for d in detections])
         scores = np.array([d.confidence for d in detections])
 
-        indices = cv2.dnn.NMSBoxes(
-            boxes.tolist(),
-            scores.tolist(),
-            score_threshold=0.0,
-            nms_threshold=0.4
-        )
+        indices = cv2.dnn.NMSBoxes(boxes.tolist(),
+                                   scores.tolist(),
+                                   score_threshold = 0.0,
+                                   nms_threshold = 0.4)
 
         if len(indices) == 0:
             return []
@@ -153,8 +159,18 @@ class DetectionTracker:
         else:
             aggregated = nms_detections
 
+        # camera stablization for each detection
+        if self._camera_stabilizer is not None and self._camera_stabilizer.is_ready():
+            stabilized_detections = self._camera_stabilizer.stabilize_detections(aggregated)
+        else:
+            stabilized_detections = aggregated
+
         # DeepSORT tracking
-        tracks = self._tracker.update(frame, aggregated, frame_id)
+        tracks = self._tracker.update(frame, stabilized_detections, frame_id)
+
+        # Update camera stabilizer with current frame (for next frame)
+        if self._camera_stabilizer is not None:
+            self._camera_stabilizer.update(frame)
 
         # Update statistics
         self._total_processing_time += time.time() - start_time
@@ -301,6 +317,8 @@ class DetectionTracker:
         """Reset the pipeline state for processing a new video."""
         self._tracker.reset()
         self._temporal.reset()
+        if self._camera_stabilizer is not None:
+            self._camera_stabilizer.reset()
         self._total_processing_time = 0.0
         self._frames_processed = 0
         self._total_detections_raw = 0
@@ -315,15 +333,21 @@ class DetectionTracker:
 
         stats = {'frames_processed': self._frames_processed,
                 'total_processing_time': self._total_processing_time,
-                'average_fps': (self._frames_processed / self._total_processing_time
-                            if self._total_processing_time > 0 else 0),
+                'average_fps': (self._frames_processed / self._total_processing_time if self._total_processing_time > 0 else 0),
                 'raw_detections': self._total_detections_raw,
                 'filtered_detections': self._total_detections_filtered,
-                'filter_ratio': (self._total_detections_filtered / self._total_detections_raw
-                            if self._total_detections_raw > 0 else 0),
+                'filter_ratio': (self._total_detections_filtered / self._total_detections_raw if self._total_detections_raw > 0 else 0),
                 **tracker_stats}
 
         return stats
+    
+    def get_camera_motion_stats(self) -> Optional[Dict]:
+        """
+        Get camera motion statistics if camera stabilizer is enabled.
+        """
+        if self._camera_stabilizer is None:
+            return None
+        return self._camera_stabilizer.get_motion_stats()
 
 # =============================================================================
 # TEST / DEMO

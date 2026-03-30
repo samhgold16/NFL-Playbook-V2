@@ -55,7 +55,7 @@ class NFLDetectionFilterConfig:
 
     # Overlap merging
     merge_overlaps: bool = True
-    merge_iou_threshold: float = 0.6 # .35 # CHANGE NEXT 
+    merge_iou_threshold: float = 0.8 # .35 # CHANGE NEXT 
 
     def __post_init__(self):
         """Validate configuration."""
@@ -88,6 +88,34 @@ class TemporalAggregatorConfig:
             raise ValueError("stride must be at least 1")
         if self.aggregation_method not in ['mean', 'max', 'weighted']:
             raise ValueError("aggregation_method must be 'mean', 'max', or 'weighted'")
+        
+# =============================================================================
+#  CAMERA MOTION COMPENSATION CONFIG
+# =============================================================================
+
+@dataclass
+class CameraStabilizerConfig:
+    """
+    Configuration for camera motion compensation.
+    """
+    enabled: bool = True
+    feature_method: str = 'shi-tomasi'  # orb, sift, shi-tomasi for speed vs accuracy
+    max_features: int = 500  # smaller is less robust, larger is slower (0, 1000)
+    quality_level: float = 0.01 
+    min_distance: float = 5.0
+    ransac_threshold: float = 3.0 # (1, 10) strict consistent matches vs lenient more matches
+    smoothing_window: int = 5 # frames to avg homography over for smoothing (1 = no smoothing, 20 = more smoothing)
+    motion_threshold: float = 1.0  # Skip if motion < 1 pixel
+
+    def __post_init__(self):
+        """Validate configuration."""
+        if self.feature_method not in ['orb', 'sift', 'shi-tomasi']:
+            raise ValueError("feature_method must be 'orb', 'sift', or 'shi-tomasi'")
+        if self.max_features < 10:
+            raise ValueError("max_features must be at least 10")
+        if self.smoothing_window < 1:
+            raise ValueError("smoothing_window must be at least 1")
+
 
 # =============================================================================
 # DETECTOR CONFIG (YOLO)
@@ -123,9 +151,9 @@ class TrackerConfig:
     """
     Configuration for DeepSORT tracker.
     """
-    max_age: int = 50 # frames to keep lost tracks alive    # 30
+    max_age: int = 60 # frames to keep lost tracks alive    # 30
     n_init: int = 2 # frames to confirm a track before outputting    # 1 
-    max_iou_distance: float = 0.2 # lower = more aggressive matching, higher = more lenient matching   # .15
+    max_iou_distance: float = 0.4 # lower = more aggressive matching, higher = more lenient matching   # .15
     max_cosine_distance: float = 0.8 # lower = more aggressive matching, higher = more lenient matching   # .15
     nn_budget: int = 1000 # max number of features to store for each track (for appearance matching) # 1000
     embedder: str = 'mobilenet' 
@@ -153,6 +181,8 @@ class DetectionTrackerConfig:
     tracker_config: Optional[TrackerConfig] = None
     nfl_filter_config: Optional[NFLDetectionFilterConfig] = None
     temporal_config: Optional[TemporalAggregatorConfig] = None
+    camera_config: Optional[CameraStabilizerConfig] = None
+
 
     # output options
     verbose: bool = True
@@ -178,6 +208,8 @@ class DetectionTrackerConfig:
             self.nfl_filter_config = NFLDetectionFilterConfig()
         if self.temporal_config is None:
             self.temporal_config = TemporalAggregatorConfig()
+        if self.camera_config is None:
+            self.camera_config = CameraStabilizerConfig()
 
 # defining nfl field, used later
 @dataclass
@@ -213,12 +245,14 @@ def get_default_pipeline_config() -> DetectionTrackerConfig:
                                                                    confidence_threshold = 0.15,
                                                                    imgsz = 1280),
                                   tracker_config = TrackerConfig(max_age = 60, n_init = 2,
-                                                                 max_iou_distance = 0.8, max_cosine_distance = 0.5,
+                                                                 max_iou_distance = 0.8, max_cosine_distance = 1.8,
                                                                  embedder = 'mobilenet'),
                                   nfl_filter_config = NFLDetectionFilterConfig(),
                                   temporal_config = TemporalAggregatorConfig(enabled = True, # False ???
                                                                              window_size = 2,
                                                                              aggregation_method = 'max'),
+                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 500, # consider featuremethod sift
+                                                                         ransac_threshold = 3.0, smoothing_window = 5, motion_threshold = 1.0),
                                   verbose = True,
                                   progress_interval = 50,
                                   save_video = True,

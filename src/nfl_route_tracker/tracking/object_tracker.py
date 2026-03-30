@@ -140,7 +140,7 @@ class ObjectTracker:
             # FILTER: Skip ghost boxes - tracks that haven't been updated
             # These are Kalman filter predictions, not actual detections
             # time_since_update > 0 means no detection was matched to this track
-            if self.config.filter_ghost_boxes and raw_track.time_since_update > 1:
+            if self.config.filter_ghost_boxes and raw_track.time_since_update > 2:
                 continue
 
             # FILTER: Require minimum number of hits before showing track

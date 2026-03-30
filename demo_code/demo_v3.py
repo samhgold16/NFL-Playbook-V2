@@ -18,11 +18,11 @@ from nfl_route_tracker.core.config import (
     DetectorConfig,
     TrackerConfig,
     NFLDetectionFilterConfig,
-    TemporalAggregatorConfig
+    TemporalAggregatorConfig,
+    CameraStabilizerConfig
 )
 from nfl_route_tracker.tracking.detection_tracker import DetectionTracker
 from nfl_route_tracker.visualizations.visualizer import TrajectoryVisualizer
-
 
 def print_header(text: str) -> None:
     """Print a formatted header."""
@@ -52,12 +52,26 @@ def print_config_summary(config: DetectionTrackerConfig) -> None:
     print(f"    Max Age: {config.tracker_config.max_age}")
     print(f"    N Init: {config.tracker_config.n_init}")
     print(f"    Embedder: {config.tracker_config.embedder}")
+    print()
+    print("  Camera Stabilization (Phase 1B):")
+    print(f"    Enabled: {config.camera_config.enabled}")
+    if config.camera_config.enabled:
+        print(f"    Feature Method: {config.camera_config.feature_method}")
+        print(f"    Max Features: {config.camera_config.max_features}")
+        print(f"    Smoothing Window: {config.camera_config.smoothing_window} frames")
+        print(f"    RANSAC Threshold: {config.camera_config.ransac_threshold} px")
 
+
+import cv2
+from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer, visualize_stabilization
+from nfl_route_tracker.core.video_loader import VideoLoader
 
 def process_single_video(video_path: Path,
                         output_dir: Path,
                         config: DetectionTrackerConfig,
-                        max_frames: Optional[int] = None) -> bool:
+                        max_frames: Optional[int] = None,
+                        debug_stabilization: bool = True,
+                        debug_frames: int = 150) -> bool:
     """
     Process a single video file.
     """
@@ -68,14 +82,39 @@ def process_single_video(video_path: Path,
     output_video = output_dir / f"{video_path.stem}_tracked.mp4"
     output_json = output_dir / f"{video_path.stem}_trajectories.json"
     output_plot = output_dir / f"{video_path.stem}_trajectories.png"
+    output_debug = output_dir / f"{video_path.stem}_stabilization_debug.mp4"
+
 
     # Initialize pipeline
     pipeline = DetectionTracker(config)
 
+    if debug_stabilization and config.camera_config.enabled:
+        print(f"\n  [Debug] Running stabilization visualization ({debug_frames} frames)...")
+
+        with VideoLoader(video_path) as loader:
+            meta = loader.metadata
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            debug_writer = cv2.VideoWriter(
+                str(output_debug), fourcc, meta.fps, (meta.width * 2, meta.height)
+            )
+            debug_stabilizer = CameraStabilizer(config.camera_config)
+
+            for frame_num, frame in loader:
+                if frame_num >= debug_frames:
+                    break
+                debug_stabilizer.update(frame)
+                raw_dets        = pipeline._detector.detect(frame)
+                stabilized_dets = debug_stabilizer.stabilize_detections(raw_dets)
+                debug_writer.write(visualize_stabilization(frame, raw_dets, stabilized_dets))
+
+            debug_writer.release()
+
+        print(f"  [Debug] Saved → {output_debug}")
+
     try:
         # Process video
-        store = pipeline.process_video(str(video_path), output_video_path=str(output_video),
-                                        output_json_path=str(output_json), max_frames=max_frames)
+        store = pipeline.process_video(str(video_path), output_video_path = str(output_video),
+                                        output_json_path = str(output_json), max_frames = max_frames)
 
         # Print results
         print("\n" + "-" * 50)
@@ -118,7 +157,6 @@ def process_single_video(video_path: Path,
         import traceback
         traceback.print_exc()
         return False
-
 
 # dont use until confimring that one video works
 def batch_process(video_dir: Path, output_dir: Path, config: DetectionTrackerConfig, max_videos: Optional[int] = None) -> int:
@@ -178,8 +216,8 @@ def batch_process(video_dir: Path, output_dir: Path, config: DetectionTrackerCon
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="NFL Route Tracker - Version 3Demo",
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description = "NFL Route Tracker - Version 3Demo",
+                                     formatter_class = argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('video', nargs='?', default=None, help='Path to video file (optional)')
 
@@ -195,6 +233,8 @@ def main():
 
     parser.add_argument('--max-frames', type=int, default=None, help='Limit frames per video (for quick testing)')
 
+    # EXTRA ARGUMENTS TO CONSIDER IF WANTED
+
     # parser.add_argument(
     #     '--no-ghost-filter',
     #     action='store_true',
@@ -206,6 +246,25 @@ def main():
     #     type=int,
     #     default=1,
     #     help='Minimum detections before showing a track (default: 1)'
+    # )
+    # parser.add_argument(
+    #     '--no-camera',
+    #     action='store_true',
+    #     help='Disable camera motion compensation (Phase 1B)'
+    # )
+
+    # parser.add_argument(
+    #     '--camera-method',
+    #     type=str,
+    #     default='shi-tomasi',
+    #     choices=['shi-tomasi', 'orb', 'sift'],
+    #     help='Feature detection method for camera stabilization (default: shi-tomasi)'
+    # )
+    # parser.add_argument(
+    #     '--camera-features',
+    #     type=int,
+    #     default=500,
+    #     help='Maximum features to track for camera stabilization (default: 500)'
     # )
 
     args = parser.parse_args()
@@ -235,7 +294,7 @@ def main():
     if args.batch:
         # Batch mode
         print_header("Batch Processing Mode")
-        success_count = batch_process(video_test_dir, output_dir, config, max_videos=args.max_videos)
+        success_count = batch_process(video_test_dir, output_dir, config, max_videos = args.max_videos)
         print(f"\nDone! Processed {success_count} videos.")
 
     elif args.video:
