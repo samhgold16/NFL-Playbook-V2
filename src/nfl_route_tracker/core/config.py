@@ -21,16 +21,16 @@ class NFLDetectionFilterConfig:
     Configuration and tuning parameters for NFL-specific detection filtering.
     """
     # Area constraints (width * height in pixels)
-    min_area: int = 400 # 2000
-    max_area: int = 20000 # 20000
+    min_area: int = 150 # 2000 # 400
+    max_area: int = 30000 # 20000
 
     # Aspect ratio constraints (width / height)
-    min_aspect_ratio: float = 0.2
+    min_aspect_ratio: float = 0.12 # .2
     max_aspect_ratio: float = 1.75 # 1.25
 
     # Confidence thresholds, ignore confidence below this and/or use ByteTrack association instead
-    min_confidence: float = 0.15
-    low_confidence: float = 0.05
+    min_confidence: float = 0.05 # .15
+    low_confidence: float = 0.03 # .05
 
     # Field zone thresholds (y-position in frame) for a 1920x984 video, with y = 984
     # All-22 camera angle: top = far, bottom = near
@@ -38,24 +38,24 @@ class NFLDetectionFilterConfig:
     far_y_threshold: int = 250
 
     # Near players (closer to camera)
-    near_area_range: Tuple[int, int] = (600, 20000) # (2500, 20000)
+    near_area_range: Tuple[int, int] = (150, 30000) # (2500, 20000) # (600, 20000)
     near_aspect_range: Tuple[float, float] = (.2, 1.75) # (0.35, 0.85)
 
     # Far players (further from camera)
-    far_area_range: Tuple[int, int] = (200, 20000) # (800, 8000)
+    far_area_range: Tuple[int, int] = (150, 15000) # (800, 8000) # (200, 20000))
     far_aspect_range: Tuple[float, float] = (0.2, 1.75) # (0.2, 0.6)
 
     # Mid-range players
-    mid_area_range: Tuple[int, int] = (400, 20000) # (1500, 12000)
+    mid_area_range: Tuple[int, int] = (400, 25000) # (1500, 12000) # (400, 20000)
     mid_aspect_range: Tuple[float, float] = (0.25, 1.75) # (0.25, 0.7)
 
     # Vertical position constraints
-    min_y_position: int = 25 # boundaries to not consider
-    max_y_position: int = 959
+    min_y_position: int = 10 # boundaries to not consider
+    max_y_position: int = 974
 
     # Overlap merging
     merge_overlaps: bool = True
-    merge_iou_threshold: float = 0.8 # .35 # CHANGE NEXT 
+    merge_iou_threshold: float = 0.15 # .35 # CHANGE NEXT  # .8
 
     def __post_init__(self):
         """Validate configuration."""
@@ -73,8 +73,8 @@ class TemporalAggregatorConfig:
     Configuration for temporal detection aggregation, aggregating detections across multiple frames to improve stability
     """
     enabled: bool = True
-    window_size: int = 6 # Number of frames to aggregate # 2
-    stride: int = 2  # Step size between windows (1 = every frame) # 1
+    window_size: int = 3 # Number of frames to aggregate # 2
+    stride: int = 1  # Step size between windows (1 = every frame) # 1
     aggregation_method: str = 'mean'  # 'mean', 'max', 'weighted'
     confidence_weight: float = 0.6  # Weight for confidence in weighted aggregation
     min_detection_count: int = 2  # Min frames a detection must appear in
@@ -153,10 +153,10 @@ class TrackerConfig:
     """
     max_age: int = 60 # frames to keep lost tracks alive    # 30
     n_init: int = 2 # frames to confirm a track before outputting    # 1 
-    max_iou_distance: float = 0.4 # lower = more aggressive matching, higher = more lenient matching   # .15
-    max_cosine_distance: float = 0.8 # lower = more aggressive matching, higher = more lenient matching   # .15
+    max_iou_distance: float = 0.75 # lower = more aggressive matching, higher = more lenient matching   # .15
+    max_cosine_distance: float = 0.7 # lower = more aggressive matching, higher = more lenient matching   # .15
     nn_budget: int = 1000 # max number of features to store for each track (for appearance matching) # 1000
-    embedder: str = 'mobilenet' 
+    embedder: str = 'mobilenet' # torchreid???
     filter_ghost_boxes: bool = True
     min_hits: int = 1
 
@@ -195,8 +195,10 @@ class DetectionTrackerConfig:
     min_area: int = 2500
     max_area: int = 10000
     min_aspect_ratio: float = 0.25
-    max_aspect_ratio: float = 1.25
-    nms_threshold: float = 0.3
+    max_aspect_ratio: float = 1.75
+
+    # fixed here for now 
+    nms_threshold: float = 0.15
 
     def __post_init__(self):
         """Initialize with defaults if not provided."""
@@ -244,13 +246,15 @@ def get_default_pipeline_config() -> DetectionTrackerConfig:
     return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8m.pt',
                                                                    confidence_threshold = 0.15,
                                                                    imgsz = 1280),
-                                  tracker_config = TrackerConfig(max_age = 60, n_init = 2,
-                                                                 max_iou_distance = 0.8, max_cosine_distance = 1.8,
-                                                                 embedder = 'mobilenet'),
+                                  tracker_config = TrackerConfig(max_age = 60, n_init = 2, # was 60 max_age
+                                                                 max_iou_distance = 0.7, max_cosine_distance = .7,
+                                                                 filter_ghost_boxes = True, min_hits = 1,
+                                                                 embedder = 'mobilenet'), # torchreid??? # mobilenet # none
                                   nfl_filter_config = NFLDetectionFilterConfig(),
                                   temporal_config = TemporalAggregatorConfig(enabled = True, # False ???
                                                                              window_size = 2,
-                                                                             aggregation_method = 'max'),
+                                                                             aggregation_method = 'mean'),
+                                  nms_threshold = .15,
                                   camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 500, # consider featuremethod sift
                                                                          ransac_threshold = 3.0, smoothing_window = 5, motion_threshold = 1.0),
                                   verbose = True,

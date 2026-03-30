@@ -61,17 +61,10 @@ def print_config_summary(config: DetectionTrackerConfig) -> None:
         print(f"    Smoothing Window: {config.camera_config.smoothing_window} frames")
         print(f"    RANSAC Threshold: {config.camera_config.ransac_threshold} px")
 
-
-import cv2
-from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer, visualize_stabilization
-from nfl_route_tracker.core.video_loader import VideoLoader
-
 def process_single_video(video_path: Path,
                         output_dir: Path,
                         config: DetectionTrackerConfig,
-                        max_frames: Optional[int] = None,
-                        debug_stabilization: bool = True,
-                        debug_frames: int = 150) -> bool:
+                        max_frames: Optional[int] = None) -> bool:
     """
     Process a single video file.
     """
@@ -82,34 +75,9 @@ def process_single_video(video_path: Path,
     output_video = output_dir / f"{video_path.stem}_tracked.mp4"
     output_json = output_dir / f"{video_path.stem}_trajectories.json"
     output_plot = output_dir / f"{video_path.stem}_trajectories.png"
-    output_debug = output_dir / f"{video_path.stem}_stabilization_debug.mp4"
-
 
     # Initialize pipeline
     pipeline = DetectionTracker(config)
-
-    if debug_stabilization and config.camera_config.enabled:
-        print(f"\n  [Debug] Running stabilization visualization ({debug_frames} frames)...")
-
-        with VideoLoader(video_path) as loader:
-            meta = loader.metadata
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            debug_writer = cv2.VideoWriter(
-                str(output_debug), fourcc, meta.fps, (meta.width * 2, meta.height)
-            )
-            debug_stabilizer = CameraStabilizer(config.camera_config)
-
-            for frame_num, frame in loader:
-                if frame_num >= debug_frames:
-                    break
-                debug_stabilizer.update(frame)
-                raw_dets        = pipeline._detector.detect(frame)
-                stabilized_dets = debug_stabilizer.stabilize_detections(raw_dets)
-                debug_writer.write(visualize_stabilization(frame, raw_dets, stabilized_dets))
-
-            debug_writer.release()
-
-        print(f"  [Debug] Saved → {output_debug}")
 
     try:
         # Process video

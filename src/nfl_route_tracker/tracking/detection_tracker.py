@@ -115,23 +115,27 @@ class DetectionTracker:
 
         return filtered
     
+    # COMMENTING OUT FOR NOW, MAY NOT BE NECESSARY WITH STRONGER NFL-SPECIFIC FILTERING
     def _apply_nms(self, detections: List[DetectionResult]) -> List[DetectionResult]:
         """Apply Non-Maximum Suppression to remove duplicate detections."""
-        if len(detections) == 0:
-            return detections
+        # if len(detections) == 0:
+        #     return detections
 
-        boxes = np.array([[d.x, d.y, d.x + d.width, d.y + d.height] for d in detections])
-        scores = np.array([d.confidence for d in detections])
+        # boxes = np.array([[d.x, d.y, d.x + d.width, d.y + d.height] for d in detections])
+        # scores = np.array([d.confidence for d in detections])
 
-        indices = cv2.dnn.NMSBoxes(boxes.tolist(),
-                                   scores.tolist(),
-                                   score_threshold = 0.0,
-                                   nms_threshold = 0.4)
+        # nms_threshold = getattr(self.config, 'nms_threshold', 0.15)
 
-        if len(indices) == 0:
-            return []
+        # indices = cv2.dnn.NMSBoxes(boxes.tolist(),
+        #                            scores.tolist(),
+        #                            score_threshold = 0.0,
+        #                            nms_threshold = nms_threshold)
 
-        return [detections[i] for i in indices.flatten()]
+        # if len(indices) == 0:
+        #     return []
+
+        # return [detections[i] for i in indices.flatten()]
+        return detections
 
     # code to process an individual frame, use later to iterate through all frames
     def process_frame(self, frame: np.ndarray, frame_id: Optional[int] = None) -> List[Track]:
