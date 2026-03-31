@@ -18,7 +18,6 @@ from nfl_route_tracker.core.config import (
     DetectorConfig,
     TrackerConfig,
     NFLDetectionFilterConfig,
-    TemporalAggregatorConfig,
     CameraStabilizerConfig
 )
 from nfl_route_tracker.tracking.detection_tracker import DetectionTracker
@@ -43,17 +42,12 @@ def print_config_summary(config: DetectionTrackerConfig) -> None:
     print(f"    Min/Max Aspect Ratio: {config.nfl_filter_config.min_aspect_ratio} - {config.nfl_filter_config.max_aspect_ratio}")
     print(f"    Merge Overlaps: {config.nfl_filter_config.merge_overlaps}")
     print()
-    print("  Temporal Aggregation:")
-    print(f"    Enabled: {config.temporal_config.enabled}")
-    print(f"    Window Size: {config.temporal_config.window_size} frames")
-    print(f"    Method: {config.temporal_config.aggregation_method}")
-    print()
     print("  DeepSORT Tracker:")
     print(f"    Max Age: {config.tracker_config.max_age}")
     print(f"    N Init: {config.tracker_config.n_init}")
     print(f"    Embedder: {config.tracker_config.embedder}")
     print()
-    print("  Camera Stabilization (Phase 1B):")
+    print("  Camera Stabilization:")
     print(f"    Enabled: {config.camera_config.enabled}")
     if config.camera_config.enabled:
         print(f"    Feature Method: {config.camera_config.feature_method}")
@@ -82,7 +76,7 @@ def process_single_video(video_path: Path,
     try:
         # Process video
         store = pipeline.process_video(str(video_path), output_video_path = str(output_video),
-                                        output_json_path = str(output_json), max_frames = max_frames)
+                                        output_json_path = str(output_json), max_frames = max_frames) # was max_frames
 
         # Print results
         print("\n" + "-" * 50)

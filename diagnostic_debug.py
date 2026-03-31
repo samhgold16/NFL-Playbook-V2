@@ -27,7 +27,6 @@ from nfl_route_tracker.core.config import get_default_pipeline_config
 from nfl_route_tracker.core.video_loader import VideoLoader
 from nfl_route_tracker.detection.player_detector import PlayerDetector, DetectionResult
 from nfl_route_tracker.detection.nfl_filter import NFLDetectionFilter
-from nfl_route_tracker.tracking.temporal_aggregator import TemporalAggregator
 
 
 def draw_detections(frame, detections, label, color=(0, 255, 0), show_conf=False):
@@ -105,54 +104,23 @@ def diagnose_video(video_path, max_frames=150, output_path=None):
     # Override with LENIENT settings based on diagnostic findings
     # The key insight: raw YOLO outperforms filtered output!
     # Let DeepSORT handle false positives via appearance matching
-    config.nfl_filter_config.min_confidence = 0.05  # Very lenient
-    config.nfl_filter_config.min_area = 150  # Catch tiny players
-    config.nfl_filter_config.max_area = 35000  # Catch huge players
-    config.nfl_filter_config.min_aspect_ratio = 0.10  # Even more lenient for crouching
-    config.nfl_filter_config.max_aspect_ratio = 1.5  # Allow players facing camera (wider than tall)
+    config.nfl_filter_config.min_confidence = 0.15  # Very lenient
+    config.nfl_filter_config.min_area = 250  # Catch tiny players
+    config.nfl_filter_config.max_area = 12500  # Catch huge players
+    config.nfl_filter_config.min_aspect_ratio = .3  # Even more lenient for crouching
+    config.nfl_filter_config.max_aspect_ratio = 1.75  # Allow players facing camera (wider than tall)
     # MERGE: Set to 0.5 to only merge very highly overlapping detections
     # NFL players overlap naturally - don't merge them, let DeepSORT handle
-    config.nfl_filter_config.merge_iou_threshold = 0.5  # High = keep more overlapping players
-    config.nfl_filter_config.near_area_range = (1500, 35000)
-    config.nfl_filter_config.far_area_range = (150, 15000)
-    config.nfl_filter_config.mid_area_range = (500, 25000)
-
-    # Temporal - DISABLE for now since it's causing problems
-    # The clustering approach is causing bouncing and missed detections
-    # Let DeepSORT handle stability instead
-    config.temporal_config.enabled = True  # ENABLED - user reports TEMPORAL is worst
-    config.temporal_config.min_detection_count = 1
+    config.nfl_filter_config.merge_iou_threshold = 0.4  # High = keep more overlapping players
+    config.nfl_filter_config.near_area_range = (250, 12500)
+    config.nfl_filter_config.far_area_range = (250, 12500)
+    config.nfl_filter_config.mid_area_range = (250, 12500)
 
     # Camera - disable for diagnostic
-    config.camera_config.enabled = True
+    config.camera_config.enabled = True  # Disable camera for pure detection diagnostic
 
     detector = PlayerDetector(config.detector_config)
-    nfl_filter = NFLDetectionFilter(
-        min_area=config.nfl_filter_config.min_area,
-        max_area=config.nfl_filter_config.max_area,
-        min_aspect_ratio=config.nfl_filter_config.min_aspect_ratio,
-        max_aspect_ratio=config.nfl_filter_config.max_aspect_ratio,
-        min_confidence=config.nfl_filter_config.min_confidence,
-        low_confidence=config.nfl_filter_config.low_confidence,
-        near_y_threshold=config.nfl_filter_config.near_y_threshold,
-        far_y_threshold=config.nfl_filter_config.far_y_threshold,
-        near_area_range=config.nfl_filter_config.near_area_range,
-        near_aspect_range=config.nfl_filter_config.near_aspect_range,
-        far_area_range=config.nfl_filter_config.far_area_range,
-        far_aspect_range=config.nfl_filter_config.far_aspect_range,
-        mid_area_range=config.nfl_filter_config.mid_area_range,
-        mid_aspect_range=config.nfl_filter_config.mid_aspect_range,
-        min_y_position=config.nfl_filter_config.min_y_position,
-        max_y_position=config.nfl_filter_config.max_y_position
-    )
-    temporal = TemporalAggregator(
-        window_size=config.temporal_config.window_size,
-        stride=config.temporal_config.stride,
-        method=config.temporal_config.aggregation_method,
-        confidence_weight=config.temporal_config.confidence_weight,
-        min_detection_count=config.temporal_config.min_detection_count,
-        position_threshold=config.temporal_config.position_threshold
-    )
+    nfl_filter = NFLDetectionFilter(config.nfl_filter_config)
 
     # Statistics tracking
     stats = defaultdict(int)
@@ -261,27 +229,11 @@ def diagnose_video(video_path, max_frames=150, output_path=None):
             )
             stats['after_merge'] += len(merged)
 
-            # STAGE 8: NMS (Non-Maximum Suppression) - DISABLED FOR NFL!
-            # NMS is fundamentally WRONG for NFL because:
-            # - We have 22 DIFFERENT players close together
-            # - Their bounding boxes naturally overlap (O-line, defensive line)
-            # - NMS suppresses one player even if it's a different person
-            # - This explains why 69% of detections were being removed!
-            #
-            # SOLUTION: Disable NMS entirely - let DeepSORT handle
-            # appearance matching to distinguish between players
-            nms_filtered = merged  # Pass through directly - NO NMS
-            stats['after_nms'] += len(nms_filtered)
-
-            # STAGE 9: Temporal Aggregation (DISABLED - causing problems)
-            # User reports TEMPORAL video is worst - boxes bounce and miss players
-            # Let DeepSORT handle stability instead
-            if config.temporal_config.enabled:
-                temporal.add_frame(frame_id, nms_filtered)
-                temporal_result = temporal.get_aggregated(frame_id)
-            else:
-                temporal_result = nms_filtered  # Pass through directly
-            stats['after_temporal'] += len(temporal_result)
+            # STAGE 8: NMS is DISABLED - See diagnostic_debug.py comments for explanation
+            # NMS was fundamentally wrong for NFL (22 different players close together)
+            # DeepSORT handles player identification via appearance matching
+            final_detections = merged  # Pass through directly - NO NMS
+            stats['after_nms'] += len(final_detections)
 
             # Generate visualization every 30 frames
             if frame_id % 30 == 0 and video_writer:
@@ -290,7 +242,7 @@ def diagnose_video(video_path, max_frames=150, output_path=None):
                 col2 = draw_detections(frame, conf_filtered, "CONF", (255, 255, 0))
                 col3 = draw_detections(frame, area_filtered, "AREA", (0, 255, 255))
                 col4 = draw_detections(frame, merged, "MERGED", (255, 0, 255))
-                col5 = draw_detections(frame, temporal_result, "TEMPORAL", (128, 128, 255))
+                col5 = draw_detections(frame, final_detections, "FINAL", (128, 128, 255))
                 # making sixth, empty column to make a 3 x 2 output instead of 1 x 5
                 empty_col = np.zeros_like(frame)
 
@@ -322,10 +274,6 @@ def diagnose_video(video_path, max_frames=150, output_path=None):
           f"(-{stats['after_ypos_filter'] - stats['after_zone_filter']})")
     print(f"  After merge:                  {stats['after_merge']:6d}  "
           f"(-{stats['after_zone_filter'] - stats['after_merge']})")
-    print(f"  After NMS:                   {stats['after_nms']:6d}  "
-          f"(-{stats['after_merge'] - stats['after_nms']})")
-    print(f"  After temporal aggregation:   {stats['after_temporal']:6d}  "
-          f"(-{stats['after_nms'] - stats['after_temporal']})")
 
     print(f"\nFilter failure breakdown:")
     total_failures = sum(filter_fail_reasons.values())
@@ -335,7 +283,7 @@ def diagnose_video(video_path, max_frames=150, output_path=None):
 
     # Calculate average detections per frame
     avg_raw = stats['raw'] / max_frames if max_frames > 0 else 0
-    avg_final = stats['after_temporal'] / max_frames if max_frames > 0 else 0
+    avg_final = stats['after_nms'] / max_frames if max_frames > 0 else 0
 
     print(f"\nAverage detections per frame:")
     print(f"  Raw:       {avg_raw:.1f}")

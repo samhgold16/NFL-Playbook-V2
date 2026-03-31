@@ -17,21 +17,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from nfl_route_tracker.detection.player_detector import DetectionResult
 
-
-@dataclass
-class CameraStabilizerConfig:
-    """
-    Configuration for camera motion compensation.
-    """
-    enabled: bool = True
-    feature_method: str = 'orb'  # 'orb', 'sift', 'shi-tomasi'
-    max_features: int = 500
-    quality_level: float = 0.01
-    min_distance: float = 5.0
-    ransac_threshold: float = 3.0
-    smoothing_window: int = 5
-    motion_threshold: float = 1.0  # Skip if motion < 1 pixel
-
+# Import CameraStabilizerConfig from centralized config
+from ..core.config import CameraStabilizerConfig
 
 class CameraStabilizer:
     """

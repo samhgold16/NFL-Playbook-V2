@@ -6,37 +6,36 @@ A Python package for extracting player tracking data from NFL All-22 film
 using computer vision techniques.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "Sam Gold"
 
 # Core components
 from .core import (
-    MotionTrackerConfig,
     NFLFieldConstants,
     NFL_FIELD,
     VideoLoader,
     VideoMetadata
 )
 
-# UNCOMMENT WHEN IMPLEMENT PHASE 2
-# from .detection import (
-#     PlayerDetector,
-#     DetectionResult
-# )
+# Detection components
+from .detection import (
+    PlayerDetector,
+    DetectionResult
+)
 
 # Tracking components
 from .tracking import (
-    # Data structures (both phases)
+    # Data structures
     Detection,
     Trajectory,
     TrajectoryStore,
 
-    # UNCOMMENT WHEN IMPLEMENT PHASE 2
-    # ObjectTracker,
-    # TrackerConfig,
-    # Track,
-    # DetectionTracker,
-    # DetectionTrackerConfig,
+    # Tracker
+    ObjectTracker,
+    TrackerConfig,
+    Track,
+    DetectionTracker,
+    DetectionTrackerConfig,
 )
 
 # Visualization components
@@ -51,33 +50,28 @@ __all__ = [
     '__author__',
 
     # Core
-    'MotionTrackerConfig',
     'NFLFieldConstants',
     'NFL_FIELD',
     'VideoLoader',
     'VideoMetadata',
 
-    # Detection (Phase 2)
-    # UNCOMMENT
-    # 'PlayerDetector',
-    # 'DetectionResult',
+    # Detection
+    'PlayerDetector',
+    'DetectionResult',
 
     # Tracking - Data structures
     'Detection',
     'Trajectory',
     'TrajectoryStore',
 
-    # Tracking - Phase 2
-    # UNCOMMENET
-    # 'ObjectTracker',
-    # 'TrackerConfig',
-    # 'Track',
-    # 'DetectionTracker',
-    # 'DetectionTrackerConfig',
+    # Tracking - Tracker
+    'ObjectTracker',
+    'TrackerConfig',
+    'Track',
+    'DetectionTracker',
+    'DetectionTrackerConfig',
 
     # Visualization
     'TrajectoryVisualizer',
     'create_tracking_video',
-    # 'create_simple_test_video',
-    # 'create_route_test_suite',
 ]

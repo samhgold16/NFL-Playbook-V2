@@ -65,7 +65,6 @@ def run_pipeline():
     print(f"  - Filtering enabled: {config_joint.enable_filtering}")
     print(f"  - Min area: {config_joint.min_area}")
     print(f"  - Max area: {config_joint.max_area}")
-    print(f"  - NMS threshold: {config_joint.nms_threshold}")
 
     print_header("Step 2: Processing and Tracking Video")
     

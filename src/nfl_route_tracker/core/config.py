@@ -21,16 +21,16 @@ class NFLDetectionFilterConfig:
     Configuration and tuning parameters for NFL-specific detection filtering.
     """
     # Area constraints (width * height in pixels)
-    min_area: int = 150 # 2000 # 400
-    max_area: int = 30000 # 20000
+    min_area: int = 250 # 2000 # 400
+    max_area: int = 12500 # 20000
 
     # Aspect ratio constraints (width / height)
-    min_aspect_ratio: float = 0.12 # .2
+    min_aspect_ratio: float = 0.25 # .2
     max_aspect_ratio: float = 1.75 # 1.25
 
     # Confidence thresholds, ignore confidence below this and/or use ByteTrack association instead
-    min_confidence: float = 0.05 # .15
-    low_confidence: float = 0.03 # .05
+    min_confidence: float = 0.15 # .15
+    low_confidence: float = 0.05 # .05
 
     # Field zone thresholds (y-position in frame) for a 1920x984 video, with y = 984
     # All-22 camera angle: top = far, bottom = near
@@ -38,15 +38,15 @@ class NFLDetectionFilterConfig:
     far_y_threshold: int = 250
 
     # Near players (closer to camera)
-    near_area_range: Tuple[int, int] = (150, 30000) # (2500, 20000) # (600, 20000)
-    near_aspect_range: Tuple[float, float] = (.2, 1.75) # (0.35, 0.85)
+    near_area_range: Tuple[int, int] = (350, 15000) # (2500, 20000) # (600, 20000)
+    near_aspect_range: Tuple[float, float] = (0.2, 1.75) # (0.35, 0.85)
 
     # Far players (further from camera)
-    far_area_range: Tuple[int, int] = (150, 15000) # (800, 8000) # (200, 20000))
+    far_area_range: Tuple[int, int] = (150, 10000) # (800, 8000) # (200, 20000))
     far_aspect_range: Tuple[float, float] = (0.2, 1.75) # (0.2, 0.6)
 
     # Mid-range players
-    mid_area_range: Tuple[int, int] = (400, 25000) # (1500, 12000) # (400, 20000)
+    mid_area_range: Tuple[int, int] = (250, 12500) # (1500, 12000) # (400, 20000)
     mid_aspect_range: Tuple[float, float] = (0.25, 1.75) # (0.25, 0.7)
 
     # Vertical position constraints
@@ -55,7 +55,7 @@ class NFLDetectionFilterConfig:
 
     # Overlap merging
     merge_overlaps: bool = True
-    merge_iou_threshold: float = 0.15 # .35 # CHANGE NEXT  # .8
+    merge_iou_threshold: float = 0.5 # .35 # CHANGE NEXT  # .8
 
     def __post_init__(self):
         """Validate configuration."""
@@ -63,31 +63,6 @@ class NFLDetectionFilterConfig:
             raise ValueError("min_area must be less than max_area")
         if self.min_aspect_ratio >= self.max_aspect_ratio:
             raise ValueError("min_aspect_ratio must be less than max_aspect_ratio")
-        
-# =============================================================================
-# TEMPORAL AGGREGATION CONFIG
-# =============================================================================
-@dataclass
-class TemporalAggregatorConfig:
-    """
-    Configuration for temporal detection aggregation, aggregating detections across multiple frames to improve stability
-    """
-    enabled: bool = True
-    window_size: int = 3 # Number of frames to aggregate # 2
-    stride: int = 1  # Step size between windows (1 = every frame) # 1
-    aggregation_method: str = 'mean'  # 'mean', 'max', 'weighted'
-    confidence_weight: float = 0.6  # Weight for confidence in weighted aggregation
-    min_detection_count: int = 2  # Min frames a detection must appear in
-    position_threshold: float = 30.0  # Max distance to consider same detection
-
-    def __post_init__(self):
-        """Validate configuration."""
-        if self.window_size < 1:
-            raise ValueError("window_size must be at least 1")
-        if self.stride < 1:
-            raise ValueError("stride must be at least 1")
-        if self.aggregation_method not in ['mean', 'max', 'weighted']:
-            raise ValueError("aggregation_method must be 'mean', 'max', or 'weighted'")
         
 # =============================================================================
 #  CAMERA MOTION COMPENSATION CONFIG
@@ -100,7 +75,7 @@ class CameraStabilizerConfig:
     """
     enabled: bool = True
     feature_method: str = 'shi-tomasi'  # orb, sift, shi-tomasi for speed vs accuracy
-    max_features: int = 500  # smaller is less robust, larger is slower (0, 1000)
+    max_features: int = 400  # smaller is less robust, larger is slower (0, 1000)
     quality_level: float = 0.01 
     min_distance: float = 5.0
     ransac_threshold: float = 3.0 # (1, 10) strict consistent matches vs lenient more matches
@@ -131,7 +106,7 @@ class DetectorConfig:
     # class 0 is associated to people
     classes: List[int] = field(default_factory = lambda: [0]) 
     device: str = 'auto'
-    imgsz: int = 1280
+    imgsz: int = 960 # 1280
 
     # sanity checks
     def __post_init__(self):
@@ -151,8 +126,8 @@ class TrackerConfig:
     """
     Configuration for DeepSORT tracker.
     """
-    max_age: int = 60 # frames to keep lost tracks alive    # 30
-    n_init: int = 2 # frames to confirm a track before outputting    # 1 
+    max_age: int = 30 # frames to keep lost tracks alive    # 30
+    n_init: int = 1 # frames to confirm a track before outputting    # 1 
     max_iou_distance: float = 0.75 # lower = more aggressive matching, higher = more lenient matching   # .15
     max_cosine_distance: float = 0.7 # lower = more aggressive matching, higher = more lenient matching   # .15
     nn_budget: int = 1000 # max number of features to store for each track (for appearance matching) # 1000
@@ -180,9 +155,7 @@ class DetectionTrackerConfig:
     detector_config: Optional[DetectorConfig] = None
     tracker_config: Optional[TrackerConfig] = None
     nfl_filter_config: Optional[NFLDetectionFilterConfig] = None
-    temporal_config: Optional[TemporalAggregatorConfig] = None
     camera_config: Optional[CameraStabilizerConfig] = None
-
 
     # output options
     verbose: bool = True
@@ -192,13 +165,10 @@ class DetectionTrackerConfig:
 
     # Legacy filtering options (used if nfl_filter_config is None)
     enable_legacy_filtering: bool = False
-    min_area: int = 2500
-    max_area: int = 10000
+    min_area: int = 250
+    max_area: int = 12500
     min_aspect_ratio: float = 0.25
     max_aspect_ratio: float = 1.75
-
-    # fixed here for now 
-    nms_threshold: float = 0.15
 
     def __post_init__(self):
         """Initialize with defaults if not provided."""
@@ -208,8 +178,6 @@ class DetectionTrackerConfig:
             self.tracker_config = TrackerConfig()
         if self.nfl_filter_config is None:
             self.nfl_filter_config = NFLDetectionFilterConfig()
-        if self.temporal_config is None:
-            self.temporal_config = TemporalAggregatorConfig()
         if self.camera_config is None:
             self.camera_config = CameraStabilizerConfig()
 
@@ -236,7 +204,6 @@ class NFLFieldConstants:
 DEFAULT_DETECTOR_CONFIG = DetectorConfig()
 DEFAULT_TRACKER_CONFIG = TrackerConfig()
 DEFAULT_NFL_FILTER_CONFIG = NFLDetectionFilterConfig()
-DEFAULT_TEMPORAL_CONFIG = TemporalAggregatorConfig()
 NFL_FIELD = NFLFieldConstants()
 
 
@@ -244,53 +211,16 @@ NFL_FIELD = NFLFieldConstants()
 def get_default_pipeline_config() -> DetectionTrackerConfig:
 
     return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8m.pt',
-                                                                   confidence_threshold = 0.15,
-                                                                   imgsz = 1280),
-                                  tracker_config = TrackerConfig(max_age = 60, n_init = 2, # was 60 max_age
-                                                                 max_iou_distance = 0.7, max_cosine_distance = .7,
+                                                                   confidence_threshold = 0.2,
+                                                                   imgsz = 960), # 1280
+                                  tracker_config = TrackerConfig(max_age = 30, n_init = 2, # was 60 max_age
+                                                                 max_iou_distance = 0.75, max_cosine_distance = 2.0,
                                                                  filter_ghost_boxes = True, min_hits = 1,
-                                                                 embedder = 'mobilenet'), # torchreid??? # mobilenet # none
+                                                                 embedder = 'mobilenet'), 
                                   nfl_filter_config = NFLDetectionFilterConfig(),
-                                  temporal_config = TemporalAggregatorConfig(enabled = True, # False ???
-                                                                             window_size = 2,
-                                                                             aggregation_method = 'mean'),
-                                  nms_threshold = .15,
-                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 500, # consider featuremethod sift
+                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 400, # consider featuremethod sift
                                                                          ransac_threshold = 3.0, smoothing_window = 5, motion_threshold = 1.0),
                                   verbose = True,
                                   progress_interval = 50,
                                   save_video = True,
                                   save_trajectories = True)
-
-# =============================================================================
-# UNUSED/OLD CODE
-# =============================================================================
-
-# phase 1 global variables
-# not used anymore, can delete?
-@dataclass
-class MotionTrackerConfig:
-    """
-    Configuration for the MotionTracker class.
-    *** no longer used ***
-    """
-
-    # 'tuned' settings for nfl videos
-    threshold: int = 40
-    min_contour_area: int = 900
-    blur_kernel_size: Tuple[int, int] = (15, 15)
-    dilation_iterations: int = 2
-    max_tracking_distance: float = 250.0
-    max_aspect_ratio: float = 1.5
-    min_area: int = 2500         
-    max_area: int = 12500       
-
-    # ensuring inputs are within allowed boudns
-    def __post_init__(self):
-        """Validate configuration after initialization."""
-        # Ensure blur kernel is odd (OpenCV requirement)
-        if self.blur_kernel_size[0] % 2 == 0 or self.blur_kernel_size[1] % 2 == 0:
-            raise ValueError("Blur kernel dimensions must be odd numbers")
-        # Ensure threshold is in valid range
-        if not 0 <= self.threshold <= 255:
-            raise ValueError("Threshold must be between 0 and 255")

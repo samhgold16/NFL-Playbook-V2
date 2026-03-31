@@ -23,13 +23,12 @@ from nfl_route_tracker.core.video_loader import VideoLoader
 from nfl_route_tracker.tracking.trajectory import TrajectoryStore
 from nfl_route_tracker.core.config import (
     TrackerConfig, DetectorConfig, DetectionTrackerConfig,
-    NFLDetectionFilterConfig, TemporalAggregatorConfig,
+    NFLDetectionFilterConfig,
     CameraStabilizerConfig
 )
 from nfl_route_tracker.detection.player_detector import DetectionResult, PlayerDetector
 from nfl_route_tracker.tracking.object_tracker import ObjectTracker, Track
 from nfl_route_tracker.detection.nfl_filter import NFLDetectionFilter
-from nfl_route_tracker.tracking.temporal_aggregator import TemporalAggregator
 from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer
 
 # main class
@@ -52,35 +51,7 @@ class DetectionTracker:
 
         # Initialize NFL-specific filter
         print("Initializing NFL Detection Filter...")
-        self._nfl_filter = NFLDetectionFilter(
-            min_area=self.config.nfl_filter_config.min_area,
-            max_area=self.config.nfl_filter_config.max_area,
-            min_aspect_ratio=self.config.nfl_filter_config.min_aspect_ratio,
-            max_aspect_ratio=self.config.nfl_filter_config.max_aspect_ratio,
-            min_confidence=self.config.nfl_filter_config.min_confidence,
-            low_confidence=self.config.nfl_filter_config.low_confidence,
-            near_y_threshold=self.config.nfl_filter_config.near_y_threshold,
-            far_y_threshold=self.config.nfl_filter_config.far_y_threshold,
-            near_area_range=self.config.nfl_filter_config.near_area_range,
-            near_aspect_range=self.config.nfl_filter_config.near_aspect_range,
-            far_area_range=self.config.nfl_filter_config.far_area_range,
-            far_aspect_range=self.config.nfl_filter_config.far_aspect_range,
-            mid_area_range=self.config.nfl_filter_config.mid_area_range,
-            mid_aspect_range=self.config.nfl_filter_config.mid_aspect_range,
-            min_y_position=self.config.nfl_filter_config.min_y_position,
-            max_y_position=self.config.nfl_filter_config.max_y_position
-        )
-
-        # Initialize temporal aggregator
-        print("Initializing Temporal Aggregator...")
-        self._temporal = TemporalAggregator(
-            window_size=self.config.temporal_config.window_size,
-            stride=self.config.temporal_config.stride,
-            method=self.config.temporal_config.aggregation_method,  # Note: uses 'method' in TemporalAggregator
-            confidence_weight=self.config.temporal_config.confidence_weight,
-            min_detection_count=self.config.temporal_config.min_detection_count,
-            position_threshold=self.config.temporal_config.position_threshold
-        )
+        self._nfl_filter = NFLDetectionFilter(self.config.nfl_filter_config)
 
         # Initialize camera stabilizer
         if self.config.camera_config.enabled:
@@ -109,33 +80,9 @@ class DetectionTracker:
 
         # Merge overlapping detections (O-line handling)
         if self.config.nfl_filter_config.merge_overlaps:
-            filtered = self._nfl_filter.merge_overlapping_detections(
-                filtered,
-                iou_threshold=self.config.nfl_filter_config.merge_iou_threshold)
+            filtered = self._nfl_filter.merge_overlapping_detections(filtered, iou_threshold = self.config.nfl_filter_config.merge_iou_threshold)
 
         return filtered
-    
-    # COMMENTING OUT FOR NOW, MAY NOT BE NECESSARY WITH STRONGER NFL-SPECIFIC FILTERING
-    def _apply_nms(self, detections: List[DetectionResult]) -> List[DetectionResult]:
-        """Apply Non-Maximum Suppression to remove duplicate detections."""
-        # if len(detections) == 0:
-        #     return detections
-
-        # boxes = np.array([[d.x, d.y, d.x + d.width, d.y + d.height] for d in detections])
-        # scores = np.array([d.confidence for d in detections])
-
-        # nms_threshold = getattr(self.config, 'nms_threshold', 0.15)
-
-        # indices = cv2.dnn.NMSBoxes(boxes.tolist(),
-        #                            scores.tolist(),
-        #                            score_threshold = 0.0,
-        #                            nms_threshold = nms_threshold)
-
-        # if len(indices) == 0:
-        #     return []
-
-        # return [detections[i] for i in indices.flatten()]
-        return detections
 
     # code to process an individual frame, use later to iterate through all frames
     def process_frame(self, frame: np.ndarray, frame_id: Optional[int] = None) -> List[Track]:
@@ -153,21 +100,11 @@ class DetectionTracker:
         filtered_detections = self._filter_detections(raw_detections, frame_height)
         self._total_detections_filtered += len(filtered_detections)
 
-        # Apply NMS
-        nms_detections = self._apply_nms(filtered_detections)
-
-        # Temporal aggregation
-        if self.config.temporal_config.enabled:
-            self._temporal.add_frame(frame_id or self._frames_processed, nms_detections)
-            aggregated = self._temporal.get_aggregated(frame_id or self._frames_processed)
-        else:
-            aggregated = nms_detections
-
-        # camera stablization for each detection
+        # camera stabilization for each detection
         if self._camera_stabilizer is not None and self._camera_stabilizer.is_ready():
-            stabilized_detections = self._camera_stabilizer.stabilize_detections(aggregated)
+            stabilized_detections = self._camera_stabilizer.stabilize_detections(filtered_detections)
         else:
-            stabilized_detections = aggregated
+            stabilized_detections = filtered_detections
 
         # DeepSORT tracking
         tracks = self._tracker.update(frame, stabilized_detections, frame_id)
@@ -196,7 +133,6 @@ class DetectionTracker:
 
         # Reset state for new video
         self._tracker.reset()
-        self._temporal.reset()
         self._total_processing_time = 0.0
         self._frames_processed = 0
         self._total_detections_raw = 0
@@ -283,6 +219,8 @@ class DetectionTracker:
 
         print(f"Trajectories saved: {filepath}")
 
+
+    # change here to customize bounding box visualizations
     def _draw_tracks(self, frame: np.ndarray, tracks: List[Track]) -> np.ndarray:
         """
         Draw track bounding boxes and IDs on a frame.
@@ -320,7 +258,6 @@ class DetectionTracker:
     def reset(self):
         """Reset the pipeline state for processing a new video."""
         self._tracker.reset()
-        self._temporal.reset()
         if self._camera_stabilizer is not None:
             self._camera_stabilizer.reset()
         self._total_processing_time = 0.0
@@ -352,58 +289,3 @@ class DetectionTracker:
         if self._camera_stabilizer is None:
             return None
         return self._camera_stabilizer.get_motion_stats()
-
-# =============================================================================
-# TEST / DEMO
-# =============================================================================
-
-
-# need anymore?
-# if __name__ == "__main__":
-#     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-
-#     from nfl_route_tracker.core.config import get_default_pipeline_config
-
-#     # Paths
-#     test_folder = Path(__file__).parent.parent.parent.parent / "data" / "video_test"
-#     video_path = test_folder / "test1.mp4"
-#     output_folder = test_folder.parent / "viz_output"
-#     output_folder.mkdir(exist_ok=True)
-
-#     if not video_path.exists():
-#         print(f"Test video not found: {video_path}")
-#         print("Using default config for import test...")
-
-#         # Just test imports
-#         config = get_default_pipeline_config()
-#         print("\nDefault config loaded successfully:")
-#         print(f"  - YOLO model: {config.detector_config.model_name}")
-#         print(f"  - Temporal window: {config.temporal_config.window_size}")
-#         print(f"  - NFL filter enabled: True")
-#     else:
-#         # Run full pipeline
-#         config = get_default_pipeline_config()
-#         config.progress_interval = 50
-#         config.save_video = True
-#         config.save_trajectories = True
-
-#         print("Running pipeline test...")
-#         pipeline = DetectionTracker(config)
-
-#         output_video = output_folder / "test_output.mp4"
-#         output_json = output_folder / "test_trajectories.json"
-
-#         store = pipeline.process_video(
-#             str(video_path),
-#             output_video_path=str(output_video),
-#             output_json_path=str(output_json)
-#         )
-
-#         print("\nProcessing complete!")
-#         print(f"Trajectories found: {store.num_trajectories}")
-#         print(f"Total detections: {store.total_detections}")
-
-#         stats = pipeline.get_statistics()
-#         print("\nStatistics:")
-#         for k, v in stats.items():
-#             print(f"  {k}: {v}")

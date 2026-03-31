@@ -11,50 +11,38 @@ from typing import List, Tuple, Optional
 import cv2
 
 from nfl_route_tracker.detection.player_detector import DetectionResult
+from nfl_route_tracker.core.config import NFLDetectionFilterConfig
 
 # same as NFLDetectionFilterConfig in config.py file
 # but with methods to apply the filter to detections, and to validate detections based on NFL-specific heuristics (size, aspect ratio, position on field)
-@dataclass
 class NFLDetectionFilter:
     """
     Filters and validates YOLO detections specifically for NFL All-22 footage.
     """
+    def __init__(self, config: Optional[NFLDetectionFilterConfig] = None):
+        """
+        Initialize the filter with configuration.
+        """
+        self.config = config or NFLDetectionFilterConfig()
 
-    # Bounding box area constraints (width * height in pixels), depends on camera zoom
-    min_area: int = 100 # 400
-    max_area: int = 30000 # 20000
-
-    # Aspect ratio constraints (width / height)
-    min_aspect_ratio: float = 0.12 # .25
-    max_aspect_ratio: float = 1.75 # 1.75
-
-    # Confidence thresholds
-    min_confidence: float = 0.05  #.15 # Below this, ignore detection
-    low_confidence: float = 0.03  # .05 # Below this, use ByteTrack association
-
-    # Field zone thresholds (y-position in frame)
-    # All-22 camera angle: top = far, bottom = near
-    near_y_threshold: int = 734   # Players below this are "near"
-    far_y_threshold: int = 250    # Players above this are "far"
-
-    # Near players: larger, wider (closer to camera)
-    near_area_range: Tuple[int, int] = (600, 30000)
-    near_aspect_range: Tuple[float, float] = (0.2, 1.75)
-
-    # Far players: smaller, taller (further from camera)
-    far_area_range: Tuple[int, int] = (150, 15000)
-    far_aspect_range: Tuple[float, float] = (0.2, 1.75)
-
-    # Mid-range players
-    mid_area_range: Tuple[int, int] = (400, 25000)
-    mid_aspect_range: Tuple[float, float] = (0.25, 1.75)
-
-    # Vertical position constraints (y-range in frame)
-    # Players should be within these bounds
-    min_y_position: int = 10     # Too high = likely crowd/noise
-    max_y_position: int = 980     # Too low = likely camera artifact
-
-    merge_iou_threshold: float = 0.15 # .5
+        # Map config attributes to filter attributes for backward compatibility
+        self.min_area = self.config.min_area
+        self.max_area = self.config.max_area
+        self.min_aspect_ratio = self.config.min_aspect_ratio
+        self.max_aspect_ratio = self.config.max_aspect_ratio
+        self.min_confidence = self.config.min_confidence
+        self.low_confidence = self.config.low_confidence
+        self.near_y_threshold = self.config.near_y_threshold
+        self.far_y_threshold = self.config.far_y_threshold
+        self.near_area_range = self.config.near_area_range
+        self.near_aspect_range = self.config.near_aspect_range
+        self.far_area_range = self.config.far_area_range
+        self.far_aspect_range = self.config.far_aspect_range
+        self.mid_area_range = self.config.mid_area_range
+        self.mid_aspect_range = self.config.mid_aspect_range
+        self.min_y_position = self.config.min_y_position
+        self.max_y_position = self.config.max_y_position
+        self.merge_iou_threshold = self.config.merge_iou_threshold
 
     def filter_detections(self, detections: List[DetectionResult], frame_height: int = 984) -> List[DetectionResult]:
         """
