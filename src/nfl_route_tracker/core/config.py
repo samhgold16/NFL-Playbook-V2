@@ -5,11 +5,9 @@ NFL Route Tracker - Configuration Module
 This module contains all configuration settings and constants used throughout the package.
 """
 
-from dataclasses import dataclass
-from typing import Tuple, Optional
-import numpy as np
+from typing import Tuple, Optional, List
 from dataclasses import dataclass, field
-from typing import List
+import numpy as np
 
 # =============================================================================
 # NFL-SPECIFIC DETECTION FILTERING CONFIG
@@ -22,7 +20,7 @@ class NFLDetectionFilterConfig:
     """
     # Area constraints (width * height in pixels)
     min_area: int = 250 # 2000 # 400
-    max_area: int = 12500 # 20000
+    max_area: int = 7500 # 20000
 
     # Aspect ratio constraints (width / height)
     min_aspect_ratio: float = 0.25 # .2
@@ -38,15 +36,15 @@ class NFLDetectionFilterConfig:
     far_y_threshold: int = 250
 
     # Near players (closer to camera)
-    near_area_range: Tuple[int, int] = (350, 15000) # (2500, 20000) # (600, 20000)
+    near_area_range: Tuple[int, int] = (350, 10000) # (2500, 20000) # (600, 20000)
     near_aspect_range: Tuple[float, float] = (0.2, 1.75) # (0.35, 0.85)
 
     # Far players (further from camera)
-    far_area_range: Tuple[int, int] = (150, 10000) # (800, 8000) # (200, 20000))
+    far_area_range: Tuple[int, int] = (150, 7500) # (800, 8000) # (200, 20000))
     far_aspect_range: Tuple[float, float] = (0.2, 1.75) # (0.2, 0.6)
 
     # Mid-range players
-    mid_area_range: Tuple[int, int] = (250, 12500) # (1500, 12000) # (400, 20000)
+    mid_area_range: Tuple[int, int] = (250, 7500) # (1500, 12000) # (400, 20000)
     mid_aspect_range: Tuple[float, float] = (0.25, 1.75) # (0.25, 0.7)
 
     # Vertical position constraints
@@ -55,7 +53,7 @@ class NFLDetectionFilterConfig:
 
     # Overlap merging
     merge_overlaps: bool = True
-    merge_iou_threshold: float = 0.5 # .35 # CHANGE NEXT  # .8
+    merge_iou_threshold: float = 0.65 # .35 # CHANGE NEXT  # .8
 
     def __post_init__(self):
         """Validate configuration."""
@@ -73,7 +71,7 @@ class CameraStabilizerConfig:
     """
     Configuration for camera motion compensation.
     """
-    enabled: bool = True
+    enabled: bool = True # disable if using ByteTrack????
     feature_method: str = 'shi-tomasi'  # orb, sift, shi-tomasi for speed vs accuracy
     max_features: int = 400  # smaller is less robust, larger is slower (0, 1000)
     quality_level: float = 0.01 
@@ -118,31 +116,62 @@ class DetectorConfig:
         
 
 # =============================================================================
-# TRACKER CONFIG (DeepSORT)
+# TRACKER CONFIG (DeepSORT) --> NOW # BYTETRACK CONFIG
 # =============================================================================
 
 @dataclass
 class TrackerConfig:
     """
     Configuration for DeepSORT tracker.
+    # for now, replacing DeepSORT with ByteTrack
     """
-    max_age: int = 30 # frames to keep lost tracks alive    # 30
-    n_init: int = 1 # frames to confirm a track before outputting    # 1 
-    max_iou_distance: float = 0.75 # lower = more aggressive matching, higher = more lenient matching   # .15
-    max_cosine_distance: float = 0.7 # lower = more aggressive matching, higher = more lenient matching   # .15
-    nn_budget: int = 1000 # max number of features to store for each track (for appearance matching) # 1000
-    embedder: str = 'mobilenet' # torchreid???
+    # max_age: int = 30 # frames to keep lost tracks alive    # 30
+    # n_init: int = 1 # frames to confirm a track before outputting    # 1 
+    # max_iou_distance: float = 0.55 # lower = more aggressive matching, higher = more lenient matching   # .15
+    # max_cosine_distance: float = 0.95 # lower = more aggressive matching, higher = more lenient matching   # .15
+    # nn_budget: int = 1000 # max number of features to store for each track (for appearance matching) # 1000
+    # embedder: str = 'mobilenet' # torchreid???
+    # filter_ghost_boxes: bool = True
+    # min_hits: int = 1
+
+    # def __post_init__(self):
+    #     """Validate configuration."""
+    #     if not 0.0 <= self.max_iou_distance <= 1.0:
+    #         raise ValueError("max_iou_distance must be between 0 and 1")
+    #     if not 0.0 <= self.max_cosine_distance <= 2.0:
+    #         raise ValueError("max_cosine_distance must be between 0 and 2")
+
+    track_high_thresh: float = 0.5 # lower/lenient vs higher/strict detection filtering [0, 1]
+    track_low_thresh: float = 0.1 # lower/lenient vs higher/strict detection filtering FOR SECOND PASS [0,1]
+    new_track_thresh: float = 0.6 # threshold for creating new tracks [0,1]
+    
+    match_thresh: float = 0.8 # overlap to match detection to existing track or not [0,1]
+    track_buffer: int = 45 # frames to keep lost track alive
+    max_trajectory_gap: int = 20 # maximum gap (in frames) to allow for interpolation when a track is temporarily lost
+    iou_threshold: float = 0.5    
+    
+    gmc_method: str = 'sift' # camera stabilization (can remove camera stabilizer now???)
+    gmc_downscale: float = 2.0 # lower/slower/accurate vs higher/faster/less accurate [1.0, inf]
+    
+    min_trajectory_length: int = 10 # minimum number of frames for a valid trajectory
+
+    # YOLO conf and ghost filtering
+    confidence_threshold: float = 0.05
     filter_ghost_boxes: bool = True
-    min_hits: int = 1
+    fuse_score: bool = True # whether to fuse detection confidence score with track confidence for filtering (ByteTrack specific)
 
     def __post_init__(self):
         """Validate configuration."""
-        if not 0.0 <= self.max_iou_distance <= 1.0:
-            raise ValueError("max_iou_distance must be between 0 and 1")
-        if not 0.0 <= self.max_cosine_distance <= 2.0:
-            raise ValueError("max_cosine_distance must be between 0 and 2")
-
-
+        valid_gmc = {'ecc', 'sift', 'orb', 'sparseOptFlow', None} # orb is fastest, ecc if most accurate
+        if self.gmc_method not in valid_gmc:
+            raise ValueError(f"gmc_method must be one of {valid_gmc}")
+        valid_thresh = {'track_thresh': self.track_high_thresh, 
+                        'track_low_thresh': self.track_low_thresh, 
+                        'new_track_thresh': self.new_track_thresh, 
+                        'match_thresh': self.match_thresh}
+        if any(x < 0 for x in valid_thresh.values()):
+            raise ValueError("All thresholds must be between 0 and 1")
+        
 # =============================================================================
 # UNIFIED DETECTION + TRACKING PIPELINE CONFIG (DetectorConfig + TrackerConfig)
 # =============================================================================
@@ -163,12 +192,13 @@ class DetectionTrackerConfig:
     save_video: bool = True  # Save annotated output video
     save_trajectories: bool = True  # Save trajectory JSON
 
-    # Legacy filtering options (used if nfl_filter_config is None)
-    enable_legacy_filtering: bool = False
-    min_area: int = 250
-    max_area: int = 12500
-    min_aspect_ratio: float = 0.25
-    max_aspect_ratio: float = 1.75
+    # CAN DELETE????
+    # # Legacy filtering options (used if nfl_filter_config is None)
+    # enable_legacy_filtering: bool = False
+    # min_area: int = 250
+    # max_area: int = 12500
+    # min_aspect_ratio: float = 0.25
+    # max_aspect_ratio: float = 1.75
 
     def __post_init__(self):
         """Initialize with defaults if not provided."""
@@ -208,19 +238,33 @@ NFL_FIELD = NFLFieldConstants()
 
 
 # setting up overall pipeline config with all defaults, can be overridden by user when initializing pipeline
-def get_default_pipeline_config() -> DetectionTrackerConfig:
+def get_pipeline_config() -> DetectionTrackerConfig:
 
-    return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8m.pt',
-                                                                   confidence_threshold = 0.2,
+    return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8l.pt',
+                                                                   confidence_threshold = 0.05,
                                                                    imgsz = 960), # 1280
-                                  tracker_config = TrackerConfig(max_age = 30, n_init = 2, # was 60 max_age
-                                                                 max_iou_distance = 0.75, max_cosine_distance = 2.0,
-                                                                 filter_ghost_boxes = True, min_hits = 1,
-                                                                 embedder = 'mobilenet'), 
-                                  nfl_filter_config = NFLDetectionFilterConfig(),
-                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 400, # consider featuremethod sift
+                                #   tracker_config = TrackerConfig(max_age = 60, n_init = 3, # was 60 max_age
+                                #                                  max_iou_distance = 0.55, max_cosine_distance = .95,
+                                #                                  filter_ghost_boxes = True, min_hits = 1,
+                                #                                  embedder = 'mobilenet'), 
+                                  tracker_config = TrackerConfig(track_high_thresh = 0.55, track_low_thresh = 0.05,
+                                                                new_track_thresh = 0.15, track_buffer = 90,
+                                                                match_thresh = 0.7, gmc_method = 'sift',
+                                                                gmc_downscale = 2.0, min_trajectory_length = 15,
+                                                                max_trajectory_gap = 50, confidence_threshold = 0.05,
+                                                                filter_ghost_boxes = False, fuse_score = True,
+                                                                iou_threshold = 0.35),
+                                  nfl_filter_config = NFLDetectionFilterConfig(merge_iou_threshold = 0.35, min_confidence = 0.15, low_confidence = 0.05),
+                                                                                                        # ORB instead??
+                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 400, # consider featuremethod sift or orb or shi-tomasi
                                                                          ransac_threshold = 3.0, smoothing_window = 5, motion_threshold = 1.0),
+                                  #camera_config = CameraStabilizerConfig(enabled = False),
                                   verbose = True,
                                   progress_interval = 50,
                                   save_video = True,
                                   save_trajectories = True)
+
+# Alias for backwards compatibility
+def get_default_pipeline_config() -> DetectionTrackerConfig:
+    """Alias for get_pipeline_config() for backwards compatibility."""
+    return get_pipeline_config()

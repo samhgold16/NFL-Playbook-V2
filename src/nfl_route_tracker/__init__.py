@@ -6,7 +6,7 @@ A Python package for extracting player tracking data from NFL All-22 film
 using computer vision techniques.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Sam Gold"
 
 # Core components
@@ -31,7 +31,8 @@ from .tracking import (
     TrajectoryStore,
 
     # Tracker
-    ObjectTracker,
+    # ObjectTracker,
+    ByteTrackTracker,
     TrackerConfig,
     Track,
     DetectionTracker,
@@ -65,7 +66,8 @@ __all__ = [
     'TrajectoryStore',
 
     # Tracking - Tracker
-    'ObjectTracker',
+    #'ObjectTracker',
+    'ByteTrackTracker',
     'TrackerConfig',
     'Track',
     'DetectionTracker',

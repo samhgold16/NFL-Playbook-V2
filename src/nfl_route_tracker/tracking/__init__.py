@@ -6,19 +6,30 @@ Motion detection and trajectory tracking.
 """
 
 from .trajectory import Detection, Trajectory, TrajectoryStore
-from .object_tracker import ObjectTracker, Track, TrackerConfig
+#from .object_tracker import ObjectTracker, Track, TrackerConfig # deepsort code
 from .detection_tracker import DetectionTracker
+from .bytetrack_tracker import ByteTrackTracker, Track
 
 # Import DetectionTrackerConfig from core.config
-from ..core.config import DetectionTrackerConfig
+from ..core.config import (DetectionTrackerConfig,
+                           TrackerConfig,
+                           get_pipeline_config,
+                           get_default_pipeline_config)
 
 __all__ = [
     'Detection',
     'Trajectory',
     'TrajectoryStore',
-    'ObjectTracker',
+    #'ObjectTracker',
     'Track',
-    'TrackerConfig',
+    #'TrackerConfig',
+    'ByteTrackTracker',
+
     'DetectionTracker',
     'DetectionTrackerConfig',
+    'TrackerConfig',
+
+    # Config functions
+    'get_pipeline_config',
+    'get_default_pipeline_config',
 ]

@@ -178,7 +178,7 @@ def batch_process(video_dir: Path, output_dir: Path, config: DetectionTrackerCon
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description = "NFL Route Tracker - Version 3Demo",
+    parser = argparse.ArgumentParser(description = "NFL Route Tracker - Version 3 Demo",
                                      formatter_class = argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('video', nargs='?', default=None, help='Path to video file (optional)')
@@ -189,45 +189,7 @@ def main():
 
     parser.add_argument('--output', type=str, default=None, help='Output directory (default: data/viz_output/)')
 
-    parser.add_argument('--no-video', action='store_true', help='Skip video output (faster processing)')
-
-    parser.add_argument('--no-json', action='store_true', help='Skip JSON trajectory output')
-
     parser.add_argument('--max-frames', type=int, default=None, help='Limit frames per video (for quick testing)')
-
-    # EXTRA ARGUMENTS TO CONSIDER IF WANTED
-
-    # parser.add_argument(
-    #     '--no-ghost-filter',
-    #     action='store_true',
-    #     help='Keep ghost boxes (Kalman predictions). Default: filter them out'
-    # )
-
-    # parser.add_argument(
-    #     '--min-hits',
-    #     type=int,
-    #     default=1,
-    #     help='Minimum detections before showing a track (default: 1)'
-    # )
-    # parser.add_argument(
-    #     '--no-camera',
-    #     action='store_true',
-    #     help='Disable camera motion compensation (Phase 1B)'
-    # )
-
-    # parser.add_argument(
-    #     '--camera-method',
-    #     type=str,
-    #     default='shi-tomasi',
-    #     choices=['shi-tomasi', 'orb', 'sift'],
-    #     help='Feature detection method for camera stabilization (default: shi-tomasi)'
-    # )
-    # parser.add_argument(
-    #     '--camera-features',
-    #     type=int,
-    #     default=500,
-    #     help='Maximum features to track for camera stabilization (default: 500)'
-    # )
 
     args = parser.parse_args()
 

@@ -1,0 +1,26 @@
+
+                # ByteTrack Configuration for NFL All-22 Tracking
+                # Auto-generated from config.py - Do not edit manually
+                # Modify TrackerConfig in config.py instead
+
+                    # Tracker type
+                    tracker_type: bytetrack
+
+                    # Detection confidence thresholds
+                    track_high_thresh: 0.55
+                    track_low_thresh: 0.05
+                    new_track_thresh: 0.15
+
+                    # Occlusion handling
+                    track_buffer: 90
+                    match_thresh: 0.7
+                    fuse_score: True
+
+                    # Global Motion Compensation (camera stabilization)
+                    # Options: 'ecc' (best), 'sift' (balanced), 'orb' (fastest), 'none' (disabled)
+                    gmc_method: sift
+                    gmc_downscale: 2.0
+
+                    # ByteTrack specific
+                    mot20: False
+                    

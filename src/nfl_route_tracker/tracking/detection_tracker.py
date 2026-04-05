@@ -20,15 +20,14 @@ import json
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from nfl_route_tracker.core.video_loader import VideoLoader
-from nfl_route_tracker.tracking.trajectory import TrajectoryStore
+from nfl_route_tracker.tracking.trajectory import TrajectoryStore, Trajectory, Detection
 from nfl_route_tracker.core.config import (
     TrackerConfig, DetectorConfig, DetectionTrackerConfig,
-    NFLDetectionFilterConfig,
-    CameraStabilizerConfig
+    NFLDetectionFilterConfig, CameraStabilizerConfig,
 )
 from nfl_route_tracker.detection.player_detector import DetectionResult, PlayerDetector
-from nfl_route_tracker.tracking.object_tracker import ObjectTracker, Track
 from nfl_route_tracker.detection.nfl_filter import NFLDetectionFilter
+from nfl_route_tracker.tracking.bytetrack_tracker import ByteTrackTracker, Track
 from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer
 
 # main class
@@ -53,23 +52,26 @@ class DetectionTracker:
         print("Initializing NFL Detection Filter...")
         self._nfl_filter = NFLDetectionFilter(self.config.nfl_filter_config)
 
-        # Initialize camera stabilizer
-        if self.config.camera_config.enabled:
-            print("Initializing Camera Stabilizer...")
-            self._camera_stabilizer = CameraStabilizer(self.config.camera_config)
-        else:
-            self._camera_stabilizer = None
-            print("Camera Stabilizer disabled")
-
         # Initialize tracker
-        print("\nInitializing DeepSORT Tracker...")
-        self._tracker = ObjectTracker(self.config.tracker_config)
+        # print("\nInitializing DeepSORT Tracker...")
+        # self._tracker = ObjectTracker(self.config.tracker_config)
+
+        # Initialize ByteTrack tracker with YOLO model reference for integrated tracking
+        print("\nInitializing ByteTrack Tracker...")
+        self._tracker = ByteTrackTracker(self.config.tracker_config, yolo_model = self._detector.model)
+
+        # Initialize Camera Stabilizer (for trajectory coordinate correction)
+        print("Initializing Camera Stabilizer...")
+        self._camera_stabilizer = CameraStabilizer(self.config.camera_config)
+        self._stabilization_enabled = self.config.camera_config.enabled
 
         # Processing statistics
         self._total_processing_time = 0.0
         self._frames_processed = 0
         self._total_detections_raw = 0
         self._total_detections_filtered = 0
+        self._total_tracks_output = 0
+        self._total_camera_motion = 0.0
 
     def _filter_detections(self, detections: List[DetectionResult], frame_height: int = 984) -> List[DetectionResult]:
         """
@@ -85,6 +87,7 @@ class DetectionTracker:
         return filtered
 
     # code to process an individual frame, use later to iterate through all frames
+    # REMOVE PRINT STATEMENTS
     def process_frame(self, frame: np.ndarray, frame_id: Optional[int] = None) -> List[Track]:
         """
         Process a single frame through the detection + tracking pipeline.
@@ -100,18 +103,20 @@ class DetectionTracker:
         filtered_detections = self._filter_detections(raw_detections, frame_height)
         self._total_detections_filtered += len(filtered_detections)
 
-        # camera stabilization for each detection
-        if self._camera_stabilizer is not None and self._camera_stabilizer.is_ready():
-            stabilized_detections = self._camera_stabilizer.stabilize_detections(filtered_detections)
-        else:
-            stabilized_detections = filtered_detections
-
         # DeepSORT tracking
-        tracks = self._tracker.update(frame, stabilized_detections, frame_id)
+        # tracks = self._tracker.update(frame, stabilized_detections, frame_id)
+
+        # ByteTrack tracking (integrated with YOLO)
+        tracks = self._tracker.update(frame, filtered_detections, frame_id)
+        self._total_tracks_output += len(tracks)
 
         # Update camera stabilizer with current frame (for next frame)
-        if self._camera_stabilizer is not None:
+        if self._stabilization_enabled:
             self._camera_stabilizer.update(frame)
+
+            # Get motion stats
+            motion_stats = self._camera_stabilizer.get_motion_stats()
+            self._total_camera_motion = motion_stats.get('total_motion_pixels', 0)
 
         # Update statistics
         self._total_processing_time += time.time() - start_time
@@ -120,8 +125,11 @@ class DetectionTracker:
         return tracks
     
     # using process_frame() over an entire video and store data
+    # remove filter_short_trajectories or find better way to integrate it if decide to go with it
     def process_video(self, video_path: str, output_video_path: Optional[str] = None,
-                      output_json_path: Optional[str] = None, max_frames: Optional[int] = None) -> TrajectoryStore:
+                      output_json_path: Optional[str] = None, max_frames: Optional[int] = None,
+                      filter_short_trajectories: bool = True, filter_off_field: bool = True,
+                      field_bounds: Optional[Dict] = None) -> TrajectoryStore:
         """
         Process an entire video file and return trajectory data.
         """
@@ -133,10 +141,13 @@ class DetectionTracker:
 
         # Reset state for new video
         self._tracker.reset()
+        self._camera_stabilizer.reset()
         self._total_processing_time = 0.0
         self._frames_processed = 0
         self._total_detections_raw = 0
         self._total_detections_filtered = 0
+        self._total_tracks_output = 0
+        self._total_camera_motion = 0.0
 
         # Determine output paths
         if output_video_path is None and self.config.save_video:
@@ -146,6 +157,7 @@ class DetectionTracker:
 
         video_writer = None
 
+        # frame loop
         with VideoLoader(str(video_path)) as video:
             total_frames = min(video.metadata.total_frames, max_frames or float('inf'))
             print(f"Video metadata: {video.metadata}")
@@ -170,19 +182,90 @@ class DetectionTracker:
 
                 # Progress output
                 if self.config.verbose and frame_id % self.config.progress_interval == 0:
-                    print(f"Processed frame {frame_id}/{int(total_frames)}")
+                    elapsed = self._total_processing_time
+                    fps = self._frames_processed / elapsed if elapsed > 0 else 0
+                    #print(f"Processed frame {frame_id}/{int(total_frames)}")
+                    print(f"Frame {frame_id}/{int(total_frames)}, Tracks: {len(tracks)}, Total time: {elapsed:.1f}s")
 
         # Finalize video
         if video_writer:
             video_writer.release()
             print(f"Output video saved: {output_video_path}")
 
-        # Save trajectories as JSON
+        # POST PROCESSING 
+
+        # Getting and filtering trajectories
         traj_store = self._tracker.get_trajectory_store()
+
+        # stabilizing all trajectories to first frame
+        if self._stabilization_enabled:
+            print("\nApplying camera stabilization to trajectories...")
+            traj_store = self._camera_stabilizer.stabilize_trajectory_store(traj_store)
+
+        # filtering out noise trajs
+        if filter_short_trajectories:
+            min_length = self.config.tracker_config.min_trajectory_length
+            traj_store = self._filter_short_trajectories(traj_store, min_length)
+
+        # Filter off-field trajectories
+        if filter_off_field:
+            traj_store = self._filter_off_field_trajectories(traj_store, field_bounds)
+
         if output_json_path:
             self._save_trajectories_json(traj_store, output_json_path)
 
         return traj_store
+    
+    def _filter_short_trajectories(self, store: TrajectoryStore, min_length: int) -> TrajectoryStore:
+        """
+        Filter out trajectories that are too short (likely noise).
+        """
+        filtered_store = TrajectoryStore()
+        removed_count = 0
+
+        for traj in store.get_all_trajectories():
+            if len(traj) >= min_length:
+                for det in traj.detections:
+                    filtered_store.add_detection(traj.track_id, det)
+            else:
+                removed_count += 1
+
+        if removed_count > 0:
+            print(f"\nFiltered out {removed_count} short trajectories")
+
+        return filtered_store
+    
+    def _filter_off_field_trajectories(self, store: TrajectoryStore, field_bounds: Optional[Dict] = None) -> TrajectoryStore:
+        """
+        Remove trajectories that spend the majority of their time off the field.
+        """
+        if field_bounds is None:
+            # MANUALLY DEFINE FIELD BOUNDS HERE
+            # right now, 50 off the bottom 50 off the top
+            field_bounds = {'min_x': 0,
+                            'max_x': 1920,
+                            'min_y': 50,
+                            'max_y': 934}
+ 
+        filtered_store = TrajectoryStore()
+        off_field_count = 0
+ 
+        for trajectory in store.get_all_trajectories():
+            total = len(trajectory.detections)
+            in_bounds = sum(1 for det in trajectory.detections
+                            if (field_bounds['min_x'] <= det.center[0] <= field_bounds['max_x']
+                                and field_bounds['min_y'] <= det.center[1] <= field_bounds['max_y']))
+ 
+            if in_bounds / max(1, total) >= 0.5:
+                for det in trajectory.detections:
+                    filtered_store.add_detection(trajectory.track_id, det)
+            else:
+                off_field_count += 1
+ 
+        if off_field_count > 0:
+            print(f"\nFiltered out {off_field_count} off-field trajectories")
+ 
+        return filtered_store
     
     def _save_trajectories_json(self, store: TrajectoryStore, filepath: str) -> None:
         """
@@ -191,10 +274,14 @@ class DetectionTracker:
         filepath = Path(filepath)
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
+        avg_detections = (store.total_detections / store.num_trajectories if store.num_trajectories > 0 else 0)
+
         data = {'metadata': {'num_trajectories': store.num_trajectories,
                             'total_detections': store.total_detections,
+                            'average_detections': avg_detections,
                             'frames_processed': self._frames_processed,
-                            'processing_time_seconds': self._total_processing_time},
+                            'processing_time_seconds': self._total_processing_time,
+                            'total_camera_motion_pixels': self._total_camera_motion},
                 'trajectories': []}
 
         for traj in store.get_all_trajectories():
@@ -218,7 +305,6 @@ class DetectionTracker:
             json.dump(data, f, indent=2)
 
         print(f"Trajectories saved: {filepath}")
-
 
     # change here to customize bounding box visualizations
     def _draw_tracks(self, frame: np.ndarray, tracks: List[Track]) -> np.ndarray:
@@ -254,38 +340,50 @@ class DetectionTracker:
     def get_trajectory_store(self) -> TrajectoryStore:
         """Get the trajectory store with all tracked data."""
         return self._tracker.get_trajectory_store()
-
-    def reset(self):
-        """Reset the pipeline state for processing a new video."""
-        self._tracker.reset()
-        if self._camera_stabilizer is not None:
-            self._camera_stabilizer.reset()
-        self._total_processing_time = 0.0
-        self._frames_processed = 0
-        self._total_detections_raw = 0
-        self._total_detections_filtered = 0
-        print("Pipeline reset complete.")
+    
+    def get_stabilized_trajectory_store(self) -> TrajectoryStore:
+        """Get the stabilized trajectory store (transformed to first-frame coordinates)."""
+        raw = self._tracker.get_trajectory_store()
+        return self._camera_stabilizer.stabilize_trajectory_store(raw)
+    
+    def get_trajectories_dataframe(self):
+        """Get trajectories as a pandas DataFrame for analysis."""
+        return self._tracker.get_trajectory_store().to_dataframe()
+    
+    def get_camera_motion_stats(self) -> Dict:
+        """Get camera motion statistics."""
+        return self._camera_stabilizer.get_motion_stats()
 
     def get_statistics(self) -> Dict:
         """
         Get processing statistics.
         """
         tracker_stats = self._tracker.get_statistics()
+        motion_stats = self._camera_stabilizer.get_motion_stats()
 
         stats = {'frames_processed': self._frames_processed,
                 'total_processing_time': self._total_processing_time,
                 'average_fps': (self._frames_processed / self._total_processing_time if self._total_processing_time > 0 else 0),
                 'raw_detections': self._total_detections_raw,
                 'filtered_detections': self._total_detections_filtered,
+                'output_tracks': self._total_tracks_output,
                 'filter_ratio': (self._total_detections_filtered / self._total_detections_raw if self._total_detections_raw > 0 else 0),
-                **tracker_stats}
+                'total_camera_motion_pixels': self._total_camera_motion,
+                **tracker_stats,
+                **motion_stats}
 
         return stats
     
-    def get_camera_motion_stats(self) -> Optional[Dict]:
-        """
-        Get camera motion statistics if camera stabilizer is enabled.
-        """
-        if self._camera_stabilizer is None:
-            return None
-        return self._camera_stabilizer.get_motion_stats()
+    # RESETTERRRRRRRRRR
+
+    def reset(self):
+        """Reset the pipeline state for processing a new video."""
+        self._tracker.reset()
+        self._camera_stabilizer.reset()
+        self._total_processing_time = 0.0
+        self._frames_processed = 0
+        self._total_detections_raw = 0
+        self._total_detections_filtered = 0
+        self._total_tracks_output = 0
+        self._total_camera_motion = 0.0
+        print("Pipeline reset complete.")

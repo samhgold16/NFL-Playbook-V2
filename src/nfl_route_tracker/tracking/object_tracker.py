@@ -117,6 +117,7 @@ class ObjectTracker:
         raw_tracks = self.tracker.update_tracks(detection_list, frame=frame)
 
         # Track hit counts for each track_id
+        # not used???
         current_track_hits = {}
 
         # Convert to Track format and store trajectories from trajectory class

@@ -20,7 +20,30 @@
 
 ## Project Structure
 
-*INSERT HERE*
+```
+src/nfl_route_tracker/
+├── core/
+│   ├── __init__.py
+│   ├── config.py               # ALL hyperparameters (ByteTrack, YOLO, NFL filter)
+│   └── video_loader.py         # CV2 video I/O wrapper
+│
+├── detection/
+│   ├── __init__.py
+│   ├── player_detector.py      # YOLO wrapper (DetectionResult)
+│   └── nfl_filter.py           # NFL-specific filtering
+│
+├── tracking/
+│   ├── __init__.py
+│   ├── bytetrack_tracker.py    # ByteTrack tracker (ACTIVE)
+│   ├── object_tracker.py       # DeepSORT wrapper (DISABLED)
+│   ├── detection_tracker.py    # Main pipeline orchestrator
+│   ├── trajectory.py           # Data structures (Detection, Trajectory, TrajectoryStore)
+│   └── bytetrack.yaml          # Used for ByteTrack
+│
+└── visualizations/
+    ├── __init__.py
+    └── visualizer.py           # Matplotlib trajectory plotting
+```
 
 ## Individual Packages
 
