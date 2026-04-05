@@ -6,7 +6,6 @@ Motion detection and trajectory tracking.
 """
 
 from .trajectory import Detection, Trajectory, TrajectoryStore
-#from .object_tracker import ObjectTracker, Track, TrackerConfig # deepsort code
 from .detection_tracker import DetectionTracker
 from .bytetrack_tracker import ByteTrackTracker, Track
 
@@ -20,9 +19,7 @@ __all__ = [
     'Detection',
     'Trajectory',
     'TrajectoryStore',
-    #'ObjectTracker',
     'Track',
-    #'TrackerConfig',
     'ByteTrackTracker',
 
     'DetectionTracker',

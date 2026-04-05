@@ -30,8 +30,6 @@ from .tracking import (
     Trajectory,
     TrajectoryStore,
 
-    # Tracker
-    # ObjectTracker,
     ByteTrackTracker,
     TrackerConfig,
     Track,
@@ -65,8 +63,6 @@ __all__ = [
     'Trajectory',
     'TrajectoryStore',
 
-    # Tracking - Tracker
-    #'ObjectTracker',
     'ByteTrackTracker',
     'TrackerConfig',
     'Track',

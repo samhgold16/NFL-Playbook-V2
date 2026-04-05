@@ -116,6 +116,56 @@ def process_video(video_path: Path, output_dir: Path,
         import traceback
         traceback.print_exc()
         return False
+    
+def batch_process(video_dir: Path, output_dir: Path, config: DetectionTrackerConfig) -> int:
+    """
+    Process multiple videos in a directory.
+    """
+    # Find all video files
+    video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
+    video_files = []
+    for ext in video_extensions:
+        video_files.extend(video_dir.glob(f"*{ext}"))
+
+    if not video_files:
+        print(f"No video files found in {video_dir}")
+        return 0
+
+    # Sort by name
+    video_files.sort()
+
+    print(f"\nFound {len(video_files)} videos to process")
+    print("=" * 70)
+
+    # Process each video
+    success_count = 0
+    failed_videos = []
+
+    for i, video_path in enumerate(video_files, 1):
+        print(f"\n[{i}/{len(video_files)}] Processing {video_path.name}")
+
+        # Create subdirectory for this video
+        video_output_dir = output_dir / video_path.stem
+        video_output_dir.mkdir(parents=True, exist_ok=True)
+
+        if process_video(video_path, video_output_dir, config):
+            success_count += 1
+        else:
+            failed_videos.append(video_path.name)
+
+    # Summary
+    print("\n" + "=" * 70)
+    print("BATCH PROCESSING COMPLETE")
+    print("=" * 70)
+    print(f"  Successful: {success_count}/{len(video_files)}")
+    print(f"  Failed: {len(failed_videos)}")
+
+    if failed_videos:
+        print("\nFailed videos:")
+        for name in failed_videos:
+            print(f"  - {name}")
+
+    return success_count
 
 def main():
     """Main entry point."""
@@ -125,10 +175,9 @@ def main():
                                     formatter_class = argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('video', nargs='?', default=None, help='Path to video file (optional)')
-
     parser.add_argument('--output', type=str, default=None, help='Output directory (default: data/viz_output/)')
-
     parser.add_argument('--max-frames', type=int, default=None, help='Limit frames per video (for quick testing)')
+    parser.add_argument('--batch', action='store_true', help='Process all videos in data/video_test/')
 
     args = parser.parse_args()
 
@@ -145,16 +194,13 @@ def main():
 
     config = get_pipeline_config()
 
-    # Apply command line overrides
-    # config.save_video = not args.no_video
-    # config.save_trajectories = not args.no_json
-    config.verbose = True
-    config.progress_interval = 25
-
     print_config_summary(config)
 
     # Determine what to process
-    if args.video:
+    if args.batch:
+        print_header("Batch Processing Mode")
+        success_count = batch_process(video_test_dir, output_dir, config)
+    elif args.video:
         # Use specified video
         video_path = Path(args.video)
         if not video_path.is_absolute():
@@ -166,6 +212,11 @@ def main():
 
         print_header("Single Video Mode")
         success = process_video(video_path, output_dir, config, args.max_frames)
+
+        if success:
+            print("\nDone!")
+        else:
+            sys.exit(1)
 
     else:
         # Find first video in test directory
@@ -190,10 +241,10 @@ def main():
 
         success = process_video(video_path, output_dir, config, args.max_frames)
 
-    if success:
-        print("\nDone!")
-    else:
-        sys.exit(1)
+        if success:
+            print("\nDone!")
+        else:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

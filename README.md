@@ -34,10 +34,10 @@ src/nfl_route_tracker/
 │
 ├── tracking/
 │   ├── __init__.py
-│   ├── bytetrack_tracker.py    # ByteTrack tracker (ACTIVE)
-│   ├── object_tracker.py       # DeepSORT wrapper (DISABLED)
+│   ├── bytetrack_tracker.py    # ByteTrack tracker
 │   ├── detection_tracker.py    # Main pipeline orchestrator
 │   ├── trajectory.py           # Data structures (Detection, Trajectory, TrajectoryStore)
+│   ├── camera_stabilizer.py    # Properly mapping trajectories
 │   └── bytetrack.yaml          # Used for ByteTrack
 │
 └── visualizations/

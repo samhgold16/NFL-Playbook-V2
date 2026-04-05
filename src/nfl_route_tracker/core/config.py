@@ -243,10 +243,6 @@ def get_pipeline_config() -> DetectionTrackerConfig:
     return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8l.pt',
                                                                    confidence_threshold = 0.05,
                                                                    imgsz = 960), # 1280
-                                #   tracker_config = TrackerConfig(max_age = 60, n_init = 3, # was 60 max_age
-                                #                                  max_iou_distance = 0.55, max_cosine_distance = .95,
-                                #                                  filter_ghost_boxes = True, min_hits = 1,
-                                #                                  embedder = 'mobilenet'), 
                                   tracker_config = TrackerConfig(track_high_thresh = 0.55, track_low_thresh = 0.05,
                                                                 new_track_thresh = 0.15, track_buffer = 90,
                                                                 match_thresh = 0.7, gmc_method = 'sift',
@@ -258,7 +254,6 @@ def get_pipeline_config() -> DetectionTrackerConfig:
                                                                                                         # ORB instead??
                                   camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 400, # consider featuremethod sift or orb or shi-tomasi
                                                                          ransac_threshold = 3.0, smoothing_window = 5, motion_threshold = 1.0),
-                                  #camera_config = CameraStabilizerConfig(enabled = False),
                                   verbose = True,
                                   progress_interval = 50,
                                   save_video = True,

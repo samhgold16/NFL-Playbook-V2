@@ -113,21 +113,6 @@ class CameraStabilizer:
  
         return min_x, min_y, max_x - min_x, max_y - min_y
     
-    def stabilize_detection(self, detection: DetectionResult) -> DetectionResult:
-        """
-        Stabilize a YOLO DetectionResult to first-frame coordinates.
-        """
-        sx, sy, sw, sh = self.stabilize_bbox(detection.x, detection.y, detection.width, detection.height)
-
-        return DetectionResult(x = sx, y = sy, width = sw, height = sh,
-                               confidence = detection.confidence,
-                               class_id = detection.class_id,
-                               class_name = detection.class_name,)
- 
-    def stabilize_detections(self, detections: List[DetectionResult]) -> List[DetectionResult]:
-        """Stabilize a list of DetectionResults."""
-        return [self.stabilize_detection(d) for d in detections]
-    
     def stabilize_trajectory_detection(self, detection: Detection) -> Detection:
         """
         Stabilize a trajectory Detection (from trajectory.py) to first-frame
@@ -305,42 +290,3 @@ class CameraStabilizer:
         return np.array([[cos_a, -sin_a, avg_dx],
                          [sin_a,  cos_a, avg_dy],
                          [0.0,    0.0,   1.0]], dtype = np.float64)
-
-
-# =========================================================================
-# debug visualizer
-# =========================================================================
-
-# utility functions to visualize homography and motion (for debugging)
-def visualize_stabilization(frame: np.ndarray,
-                            detections: List[DetectionResult],
-                            stabilized_detections: List[DetectionResult]) -> np.ndarray:
-    """
-    Create side-by-side visualization of original vs stabilized detections.
-    """
-    # Draw original detections
-    frame_orig = frame.copy()
-    for det in detections:
-        x, y, w, h = int(det.x), int(det.y), int(det.width), int(det.height)
-        cv2.rectangle(frame_orig, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv2.putText(frame_orig, f"({det.x:.0f},{det.y:.0f})", (x, y - 5),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-
-    # Draw stabilized detections
-    frame_stab = frame.copy()
-    for det in stabilized_detections:
-        x, y, w, h = int(det.x), int(det.y), int(det.width), int(det.height)
-        cv2.rectangle(frame_stab, (x, y), (x + w, y + h), (255, 0, 0), 2)
-        cv2.putText(frame_stab, f"({det.x:.0f},{det.y:.0f})", (x, y - 5),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
-
-    # Concatenate side by side
-    combined = np.hstack([frame_orig, frame_stab])
-
-    # Add labels
-    cv2.putText(combined, "ORIGINAL", (10, 30),
-               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    cv2.putText(combined, "STABILIZED", (frame.shape[1] + 10, 30),
-               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-
-    return combined
