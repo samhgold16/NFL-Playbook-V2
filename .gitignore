@@ -28,6 +28,7 @@ dist/
 # Large data (if applicable)
 data/raw/
 data/
+training_data/
 
 # yolo stuff
 *.pt

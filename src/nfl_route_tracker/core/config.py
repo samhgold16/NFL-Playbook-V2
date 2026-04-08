@@ -19,7 +19,7 @@ class NFLDetectionFilterConfig:
     Configuration and tuning parameters for NFL-specific detection filtering.
     """
     # Area constraints (width * height in pixels)
-    min_area: int = 250 # 2000 # 400
+    min_area: int = 150 # 2000 # 400
     max_area: int = 7500 # 20000
 
     # Aspect ratio constraints (width / height)
@@ -53,7 +53,7 @@ class NFLDetectionFilterConfig:
 
     # Overlap merging
     merge_overlaps: bool = True
-    merge_iou_threshold: float = 0.65 # .35 # CHANGE NEXT  # .8
+    merge_iou_threshold: float = 0.35 # .35 # CHANGE NEXT  # .8
 
     def __post_init__(self):
         """Validate configuration."""
@@ -125,30 +125,14 @@ class TrackerConfig:
     Configuration for DeepSORT tracker.
     # for now, replacing DeepSORT with ByteTrack
     """
-    # max_age: int = 30 # frames to keep lost tracks alive    # 30
-    # n_init: int = 1 # frames to confirm a track before outputting    # 1 
-    # max_iou_distance: float = 0.55 # lower = more aggressive matching, higher = more lenient matching   # .15
-    # max_cosine_distance: float = 0.95 # lower = more aggressive matching, higher = more lenient matching   # .15
-    # nn_budget: int = 1000 # max number of features to store for each track (for appearance matching) # 1000
-    # embedder: str = 'mobilenet' # torchreid???
-    # filter_ghost_boxes: bool = True
-    # min_hits: int = 1
-
-    # def __post_init__(self):
-    #     """Validate configuration."""
-    #     if not 0.0 <= self.max_iou_distance <= 1.0:
-    #         raise ValueError("max_iou_distance must be between 0 and 1")
-    #     if not 0.0 <= self.max_cosine_distance <= 2.0:
-    #         raise ValueError("max_cosine_distance must be between 0 and 2")
-
-    track_high_thresh: float = 0.5 # lower/lenient vs higher/strict detection filtering [0, 1]
-    track_low_thresh: float = 0.1 # lower/lenient vs higher/strict detection filtering FOR SECOND PASS [0,1]
+    track_high_thresh: float = 0.4 # lower/lenient vs higher/strict detection filtering [0, 1]
+    track_low_thresh: float = 0.05 # lower/lenient vs higher/strict detection filtering FOR SECOND PASS [0,1]
     new_track_thresh: float = 0.6 # threshold for creating new tracks [0,1]
     
     match_thresh: float = 0.8 # overlap to match detection to existing track or not [0,1]
-    track_buffer: int = 45 # frames to keep lost track alive
-    max_trajectory_gap: int = 20 # maximum gap (in frames) to allow for interpolation when a track is temporarily lost
-    iou_threshold: float = 0.5    
+    track_buffer: int = 90 # frames to keep lost track alive
+    max_trajectory_gap: int = 50 # maximum gap (in frames) to allow for interpolation when a track is temporarily lost
+    iou_threshold: float = 0.35    
     
     gmc_method: str = 'sift' # camera stabilization (can remove camera stabilizer now???)
     gmc_downscale: float = 2.0 # lower/slower/accurate vs higher/faster/less accurate [1.0, inf]
@@ -191,14 +175,6 @@ class DetectionTrackerConfig:
     progress_interval: int = 50
     save_video: bool = True  # Save annotated output video
     save_trajectories: bool = True  # Save trajectory JSON
-
-    # CAN DELETE????
-    # # Legacy filtering options (used if nfl_filter_config is None)
-    # enable_legacy_filtering: bool = False
-    # min_area: int = 250
-    # max_area: int = 12500
-    # min_aspect_ratio: float = 0.25
-    # max_aspect_ratio: float = 1.75
 
     def __post_init__(self):
         """Initialize with defaults if not provided."""
@@ -243,17 +219,17 @@ def get_pipeline_config() -> DetectionTrackerConfig:
     return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8l.pt',
                                                                    confidence_threshold = 0.05,
                                                                    imgsz = 960), # 1280
-                                  tracker_config = TrackerConfig(track_high_thresh = 0.55, track_low_thresh = 0.05,
+                                  tracker_config = TrackerConfig(track_high_thresh = 0.5, track_low_thresh = 0.1,
                                                                 new_track_thresh = 0.15, track_buffer = 90,
-                                                                match_thresh = 0.7, gmc_method = 'sift',
-                                                                gmc_downscale = 2.0, min_trajectory_length = 15,
+                                                                match_thresh = 0.6, gmc_method = 'sift',
+                                                                gmc_downscale = 2.0, min_trajectory_length = 30,
                                                                 max_trajectory_gap = 50, confidence_threshold = 0.05,
-                                                                filter_ghost_boxes = False, fuse_score = True,
-                                                                iou_threshold = 0.35),
-                                  nfl_filter_config = NFLDetectionFilterConfig(merge_iou_threshold = 0.35, min_confidence = 0.15, low_confidence = 0.05),
+                                                                filter_ghost_boxes = True, fuse_score = True,
+                                                                iou_threshold = 0.4),
+                                  nfl_filter_config = NFLDetectionFilterConfig(merge_iou_threshold = 0.4, min_confidence = 0.15, low_confidence = 0.05),
                                                                                                         # ORB instead??
-                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 400, # consider featuremethod sift or orb or shi-tomasi
-                                                                         ransac_threshold = 3.0, smoothing_window = 5, motion_threshold = 1.0),
+                                  camera_config = CameraStabilizerConfig(enabled = True, max_features = 400, # consider featuremethod sift or orb or shi-tomasi
+                                                                         ransac_threshold = 4.0, smoothing_window = 10, motion_threshold = 1.0),
                                   verbose = True,
                                   progress_interval = 50,
                                   save_video = True,

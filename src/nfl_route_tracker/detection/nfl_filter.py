@@ -7,8 +7,9 @@ This module provides NFL-specific post-processing for YOLO detections.
 
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 import cv2
+import math
 
 from nfl_route_tracker.detection.player_detector import DetectionResult
 from nfl_route_tracker.core.config import NFLDetectionFilterConfig
@@ -43,6 +44,14 @@ class NFLDetectionFilter:
         self.min_y_position = self.config.min_y_position
         self.max_y_position = self.config.max_y_position
         self.merge_iou_threshold = self.config.merge_iou_threshold
+
+        # Bbox area stability tracking
+        # Track recent detection areas by center position (using grid cells)
+        ##### SHOULD REPLACE AND ADD INTO CONFIG FILE????
+        self._area_history: Dict[Tuple[int, int], List[float]] = {}  # (grid_x, grid_y) -> list of recent areas
+        self._grid_size: int = 500  # Grid cell size in pixels for position grouping
+        self._max_area_change_ratio: float = 5  # Max 50% area change between frames
+        self._history_length: int = 3  # Keep last 5 detections per grid cell
 
     def filter_detections(self, detections: List[DetectionResult], frame_height: int = 984) -> List[DetectionResult]:
         """
@@ -109,7 +118,7 @@ class NFLDetectionFilter:
 
         return True
 
-    def merge_overlapping_detections(self, detections: List[DetectionResult],  iou_threshold: float = 0.3) -> List[DetectionResult]:
+    def merge_overlapping_detections(self, detections: List[DetectionResult],  iou_threshold) -> List[DetectionResult]:
         """
         Handle overlapping detections by merging or suppressing them based on IOU and confidence.
         """
@@ -170,3 +179,81 @@ class NFLDetectionFilter:
         union = area1 + area2 - intersection
 
         return intersection / union if union > 0 else 0
+    
+    ### ALL CODE BELOW FOR BOUNDING BOX AREA STABILITY
+    
+    def _get_grid_key(self, detection: DetectionResult) -> Tuple[int, int]:
+        """
+        Get grid key for position-based area history tracking.
+        """
+        center_x, center_y = detection.center
+        grid_x = int(center_x // self._grid_size)
+        grid_y = int(center_y // self._grid_size)
+        return (grid_x, grid_y)
+
+    def constrain_bbox_area_stability(self, detections: List[DetectionResult]) -> List[DetectionResult]:
+        """
+        Constrain bounding box area to prevent wildly different sizes between frames.
+        """
+        if not detections:
+            return detections
+
+        constrained_detections = []
+
+        for det in detections:
+            grid_key = self._get_grid_key(det)
+            current_area = det.area
+
+            # Check area history for this grid region
+            if grid_key in self._area_history and len(self._area_history[grid_key]) > 0:
+                recent_areas = self._area_history[grid_key]
+                avg_recent_area = sum(recent_areas) / len(recent_areas)
+
+                # Calculate area ratio
+                if avg_recent_area > 0:
+                    area_ratio = current_area / avg_recent_area
+
+                    # If area changed by more than max_ratio (e.g., 50%), adjust it
+                    if area_ratio > self._max_area_change_ratio:
+                        # Detection area is too large - likely multiple players merged
+                        # Adjust to reasonable size while keeping center position
+                        scale = math.sqrt(avg_recent_area / current_area)
+                        new_width = det.width * scale
+                        new_height = det.height * scale
+
+                        # Create adjusted detection (maintaining confidence and class)
+                        det = DetectionResult(
+                            x = det.x + (det.width - new_width) / 2,
+                            y = det.y + (det.height - new_height) / 2,
+                            width = new_width,
+                            height = new_height,
+                            confidence = det.confidence,
+                            class_id = det.class_id,
+                            class_name = det.class_name
+                        )
+
+                    elif area_ratio < (1.0 / self._max_area_change_ratio):
+                        # Detection area is too small - likely track switched
+                        # Keep the smaller area but don't expand it
+                        pass  # Let it through (smaller is better than larger wrong)
+
+            # Update area history for this grid cell
+            if grid_key not in self._area_history:
+                self._area_history[grid_key] = []
+
+            self._area_history[grid_key].append(det.area)
+
+            # Keep only recent history
+            if len(self._area_history[grid_key]) > self._history_length:
+                self._area_history[grid_key].pop(0)
+
+            constrained_detections.append(det)
+
+        return constrained_detections
+
+    def reset_area_history(self) -> None:
+        """
+        Reset area history tracking.
+        Call this when starting a new video or new play.
+        """
+        self._area_history.clear()

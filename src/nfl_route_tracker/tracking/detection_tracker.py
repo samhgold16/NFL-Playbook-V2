@@ -52,18 +52,19 @@ class DetectionTracker:
         print("Initializing NFL Detection Filter...")
         self._nfl_filter = NFLDetectionFilter(self.config.nfl_filter_config)
 
-        # Initialize tracker
-        # print("\nInitializing DeepSORT Tracker...")
-        # self._tracker = ObjectTracker(self.config.tracker_config)
-
         # Initialize ByteTrack tracker with YOLO model reference for integrated tracking
         print("\nInitializing ByteTrack Tracker...")
         self._tracker = ByteTrackTracker(self.config.tracker_config, yolo_model = self._detector.model)
 
         # Initialize Camera Stabilizer (for trajectory coordinate correction)
-        print("Initializing Camera Stabilizer...")
-        self._camera_stabilizer = CameraStabilizer(self.config.camera_config)
-        self._stabilization_enabled = self.config.camera_config.enabled
+        if self.config.tracker_config.gmc_method and self.config.tracker_config.gmc_method != 'none':
+            print("Using ByteTrack's built-in GMC, disabling CameraStabilizer")
+            self._camera_stabilizer = None
+            self._stabilization_enabled = False
+        else:
+            print("Initializing Camera Stabilizer...")
+            self._camera_stabilizer = CameraStabilizer(self.config.camera_config)
+            self._stabilization_enabled = self.config.camera_config.enabled
 
         # Processing statistics
         self._total_processing_time = 0.0
@@ -84,6 +85,9 @@ class DetectionTracker:
         if self.config.nfl_filter_config.merge_overlaps:
             filtered = self._nfl_filter.merge_overlapping_detections(filtered, iou_threshold = self.config.nfl_filter_config.merge_iou_threshold)
 
+        # including bounding box stability code
+        filtered = self._nfl_filter.constrain_bbox_area_stability(filtered)
+
         return filtered
 
     # code to process an individual frame, use later to iterate through all frames
@@ -103,15 +107,12 @@ class DetectionTracker:
         filtered_detections = self._filter_detections(raw_detections, frame_height)
         self._total_detections_filtered += len(filtered_detections)
 
-        # DeepSORT tracking
-        # tracks = self._tracker.update(frame, stabilized_detections, frame_id)
-
         # ByteTrack tracking (integrated with YOLO)
         tracks = self._tracker.update(frame, filtered_detections, frame_id)
         self._total_tracks_output += len(tracks)
 
         # Update camera stabilizer with current frame (for next frame)
-        if self._stabilization_enabled:
+        if self._stabilization_enabled and self._camera_stabilizer is not None:
             self._camera_stabilizer.update(frame)
 
             # Get motion stats
@@ -141,7 +142,8 @@ class DetectionTracker:
 
         # Reset state for new video
         self._tracker.reset()
-        self._camera_stabilizer.reset()
+        if self._camera_stabilizer is not None:
+            self._camera_stabilizer.reset()
         self._total_processing_time = 0.0
         self._frames_processed = 0
         self._total_detections_raw = 0
@@ -198,9 +200,11 @@ class DetectionTracker:
         traj_store = self._tracker.get_trajectory_store()
 
         # stabilizing all trajectories to first frame
-        if self._stabilization_enabled:
-            print("\nApplying camera stabilization to trajectories...")
+        if self._stabilization_enabled and self._camera_stabilizer is not None:
+            print("\nApplying standalone camera stabilization to trajectories...")
             traj_store = self._camera_stabilizer.stabilize_trajectory_store(traj_store)
+        else:
+            print("\nSkipping standalone camera stabilization")
 
         # filtering out noise trajs
         if filter_short_trajectories:
@@ -209,7 +213,7 @@ class DetectionTracker:
 
         # Filter off-field trajectories
         if filter_off_field:
-            traj_store = self._filter_off_field_trajectories(traj_store, field_bounds)
+            traj_store = self._filter_off_field_trajectories(traj_store, field_bounds, video.metadata if 'video' in dir() else None)
 
         if output_json_path:
             self._save_trajectories_json(traj_store, output_json_path)
@@ -235,17 +239,18 @@ class DetectionTracker:
 
         return filtered_store
     
-    def _filter_off_field_trajectories(self, store: TrajectoryStore, field_bounds: Optional[Dict] = None) -> TrajectoryStore:
+    def _filter_off_field_trajectories(self, store: TrajectoryStore, field_bounds: Optional[Dict] = None, video_metadata = None) -> TrajectoryStore:
         """
         Remove trajectories that spend the majority of their time off the field.
         """
         if field_bounds is None:
-            # MANUALLY DEFINE FIELD BOUNDS HERE
-            # right now, 50 off the bottom 50 off the top
-            field_bounds = {'min_x': 0,
-                            'max_x': 1920,
-                            'min_y': 50,
-                            'max_y': 934}
+            if video_metadata is not None:
+                # top and bottom 5% y-axis of video being counted
+                margin_y = int(video_metadata.height * 0.05)
+                field_bounds = {'min_x': 0, 'max_x': video_metadata.width,
+                                'min_y': margin_y, 'max_y': video_metadata.height - margin_y}
+            else:
+                field_bounds = {'min_x': 0, 'max_x': 1920, 'min_y': 50, 'max_y': 934}
  
         filtered_store = TrajectoryStore()
         off_field_count = 0
@@ -343,6 +348,9 @@ class DetectionTracker:
     
     def get_stabilized_trajectory_store(self) -> TrajectoryStore:
         """Get the stabilized trajectory store (transformed to first-frame coordinates)."""
+        if self._camera_stabilizer is None:
+            # Using ByteTrack's built-in GMC - trajectories are already stabilized
+            return self._tracker.get_trajectory_store()
         raw = self._tracker.get_trajectory_store()
         return self._camera_stabilizer.stabilize_trajectory_store(raw)
     
@@ -352,6 +360,9 @@ class DetectionTracker:
     
     def get_camera_motion_stats(self) -> Dict:
         """Get camera motion statistics."""
+        if self._camera_stabilizer is None:
+            # Using ByteTrack's built-in GMC - stats are handled internally
+            return {'using_bytetrack_gmc': True, 'total_motion_pixels': self._total_camera_motion}
         return self._camera_stabilizer.get_motion_stats()
 
     def get_statistics(self) -> Dict:
@@ -359,7 +370,8 @@ class DetectionTracker:
         Get processing statistics.
         """
         tracker_stats = self._tracker.get_statistics()
-        motion_stats = self._camera_stabilizer.get_motion_stats()
+        if self._camera_stabilizer is not None:
+            motion_stats = self._camera_stabilizer.get_motion_stats()
 
         stats = {'frames_processed': self._frames_processed,
                 'total_processing_time': self._total_processing_time,
@@ -369,8 +381,8 @@ class DetectionTracker:
                 'output_tracks': self._total_tracks_output,
                 'filter_ratio': (self._total_detections_filtered / self._total_detections_raw if self._total_detections_raw > 0 else 0),
                 'total_camera_motion_pixels': self._total_camera_motion,
-                **tracker_stats,
-                **motion_stats}
+                **tracker_stats,}
+                #**motion_stats}
 
         return stats
     
@@ -379,7 +391,9 @@ class DetectionTracker:
     def reset(self):
         """Reset the pipeline state for processing a new video."""
         self._tracker.reset()
-        self._camera_stabilizer.reset()
+        if self._camera_stabilizer is not None:
+            self._camera_stabilizer.reset()
+        self._nfl_filter.reset_area_history()
         self._total_processing_time = 0.0
         self._frames_processed = 0
         self._total_detections_raw = 0
