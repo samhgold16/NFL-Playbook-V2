@@ -29,6 +29,7 @@ from nfl_route_tracker.detection.player_detector import DetectionResult, PlayerD
 from nfl_route_tracker.detection.nfl_filter import NFLDetectionFilter
 from nfl_route_tracker.tracking.bytetrack_tracker import ByteTrackTracker, Track
 from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer
+from nfl_route_tracker.tracking.trajectory_merger import TrajectoryMerger, merge_trajectory_store
 
 # main class
 class DetectionTracker:
@@ -65,6 +66,13 @@ class DetectionTracker:
             print("Initializing Camera Stabilizer...")
             self._camera_stabilizer = CameraStabilizer(self.config.camera_config)
             self._stabilization_enabled = self.config.camera_config.enabled
+
+        # Initialize Trajectory Merger for post-processing fragmented tracks
+        print("Initializing Trajectory Merger...")
+        self._trajectory_merger = TrajectoryMerger(spatial_threshold = self.config.tracker_config.merger_spatial_threshold,
+                                                   temporal_threshold=self.config.tracker_config.merger_temporal_threshold,
+                                                   confidence_threshold=self.config.tracker_config.merger_confidence_threshold)
+        self._merger_enabled = self.config.tracker_config.enable_trajectory_merging
 
         # Processing statistics
         self._total_processing_time = 0.0
@@ -198,6 +206,11 @@ class DetectionTracker:
 
         # Getting and filtering trajectories
         traj_store = self._tracker.get_trajectory_store()
+
+        # Apply trajectory post-processing to merge fragmented tracks
+        if self._merger_enabled:
+            print("\nApplying trajectory post-processing to merge fragmented tracks...")
+            traj_store = self._trajectory_merger.merge_trajectories(traj_store)
 
         # stabilizing all trajectories to first frame
         if self._stabilization_enabled and self._camera_stabilizer is not None:

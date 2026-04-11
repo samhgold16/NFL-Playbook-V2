@@ -8,6 +8,7 @@ Motion detection and trajectory tracking.
 from .trajectory import Detection, Trajectory, TrajectoryStore
 from .detection_tracker import DetectionTracker
 from .bytetrack_tracker import ByteTrackTracker, Track
+from .trajectory_merger import TrajectoryMerger, merge_trajectory_store
 
 # Import DetectionTrackerConfig from core.config
 from ..core.config import (DetectionTrackerConfig,
@@ -21,6 +22,8 @@ __all__ = [
     'TrajectoryStore',
     'Track',
     'ByteTrackTracker',
+    'TrajectoryMerger',
+    'merge_trajectory_store',
 
     'DetectionTracker',
     'DetectionTrackerConfig',

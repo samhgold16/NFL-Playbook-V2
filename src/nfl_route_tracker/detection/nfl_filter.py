@@ -50,8 +50,8 @@ class NFLDetectionFilter:
         ##### SHOULD REPLACE AND ADD INTO CONFIG FILE????
         self._area_history: Dict[Tuple[int, int], List[float]] = {}  # (grid_x, grid_y) -> list of recent areas
         self._grid_size: int = 500  # Grid cell size in pixels for position grouping
-        self._max_area_change_ratio: float = 5  # Max 50% area change between frames
-        self._history_length: int = 3  # Keep last 5 detections per grid cell
+        self._max_area_change_ratio: float = 2.5  # Max 50% area change between frames
+        self._history_length: int = 5  # Keep last 5 detections per grid cell
 
     def filter_detections(self, detections: List[DetectionResult], frame_height: int = 984) -> List[DetectionResult]:
         """

@@ -53,7 +53,7 @@ class NFLDetectionFilterConfig:
 
     # Overlap merging
     merge_overlaps: bool = True
-    merge_iou_threshold: float = 0.35 # .35 # CHANGE NEXT  # .8
+    merge_iou_threshold: float = 0.45 # .35 # CHANGE NEXT  # .8
 
     def __post_init__(self):
         """Validate configuration."""
@@ -144,6 +144,12 @@ class TrackerConfig:
     filter_ghost_boxes: bool = True
     fuse_score: bool = True # whether to fuse detection confidence score with track confidence for filtering (ByteTrack specific)
 
+    # Trajectory Post-Processing (trajectory merger)
+    enable_trajectory_merging: bool = True  # Enable/disable trajectory merging
+    merger_spatial_threshold: float = 150.0  # Max distance (pixels) between trajectory end and next start
+    merger_temporal_threshold: int = 45  # Max frame gap to consider for merging (~0.75 seconds at 60fps)
+    merger_confidence_threshold: float = 0.75  # Minimum score to perform merge
+
     def __post_init__(self):
         """Validate configuration."""
         valid_gmc = {'ecc', 'sift', 'orb', 'sparseOptFlow', None} # orb is fastest, ecc if most accurate
@@ -225,7 +231,11 @@ def get_pipeline_config() -> DetectionTrackerConfig:
                                                                 gmc_downscale = 2.0, min_trajectory_length = 30,
                                                                 max_trajectory_gap = 50, confidence_threshold = 0.05,
                                                                 filter_ghost_boxes = True, fuse_score = True,
-                                                                iou_threshold = 0.4),
+                                                                iou_threshold = 0.4,
+                                                                enable_trajectory_merging = True,
+                                                                merger_spatial_threshold = 300.0,
+                                                                merger_temporal_threshold = 90,
+                                                                merger_confidence_threshold = 0.5),
                                   nfl_filter_config = NFLDetectionFilterConfig(merge_iou_threshold = 0.4, min_confidence = 0.15, low_confidence = 0.05),
                                                                                                         # ORB instead??
                                   camera_config = CameraStabilizerConfig(enabled = True, max_features = 400, # consider featuremethod sift or orb or shi-tomasi

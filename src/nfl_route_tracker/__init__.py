@@ -30,11 +30,16 @@ from .tracking import (
     Trajectory,
     TrajectoryStore,
 
-    ByteTrackTracker,
-    TrackerConfig,
     Track,
+    ByteTrackTracker,
+    TrajectoryMerger,
+    merge_trajectory_store,
+
     DetectionTracker,
     DetectionTrackerConfig,
+    TrackerConfig,
+    get_pipeline_config,
+    get_default_pipeline_config,
 )
 
 # Visualization components
@@ -68,6 +73,10 @@ __all__ = [
     'Track',
     'DetectionTracker',
     'DetectionTrackerConfig',
+    'TrajectoryMerger',
+    'merge_trajectory_store',
+    'get_pipeline_config',
+    'get_default_pipeline_config',
 
     # Visualization
     'TrajectoryVisualizer',
