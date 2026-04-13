@@ -30,16 +30,21 @@ from .tracking import (
     Trajectory,
     TrajectoryStore,
 
-    Track,
+    # Trackers
     ByteTrackTracker,
-    TrajectoryMerger,
-    merge_trajectory_store,
-
+    TrackerConfig,
+    Track,
     DetectionTracker,
     DetectionTrackerConfig,
-    TrackerConfig,
-    get_pipeline_config,
-    get_default_pipeline_config,
+
+    # Field orientation (perspective correction)
+    FieldOrientationDetector,
+    FieldOrientation,
+    FieldOrientationConfig,
+
+    # Trajectory processing
+    TrajectoryMerger,
+    merge_trajectory_store,
 )
 
 # Visualization components
@@ -73,10 +78,15 @@ __all__ = [
     'Track',
     'DetectionTracker',
     'DetectionTrackerConfig',
+
+    # Field orientation (perspective correction)
+    'FieldOrientationDetector',
+    'FieldOrientation',
+    'FieldOrientationConfig',
+
+    # Trajectory processing
     'TrajectoryMerger',
     'merge_trajectory_store',
-    'get_pipeline_config',
-    'get_default_pipeline_config',
 
     # Visualization
     'TrajectoryVisualizer',

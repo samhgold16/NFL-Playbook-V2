@@ -24,11 +24,14 @@ from nfl_route_tracker.tracking.trajectory import TrajectoryStore, Trajectory, D
 from nfl_route_tracker.core.config import (
     TrackerConfig, DetectorConfig, DetectionTrackerConfig,
     NFLDetectionFilterConfig, CameraStabilizerConfig,
+    FieldCameraStabilizerConfig, FieldOrientationConfig
 )
 from nfl_route_tracker.detection.player_detector import DetectionResult, PlayerDetector
 from nfl_route_tracker.detection.nfl_filter import NFLDetectionFilter
 from nfl_route_tracker.tracking.bytetrack_tracker import ByteTrackTracker, Track
 from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer
+from nfl_route_tracker.tracking.field_camera_stabilizer import FieldCameraStabilizer
+from nfl_route_tracker.tracking.field_orientation_detector import FieldOrientationDetector
 from nfl_route_tracker.tracking.trajectory_merger import TrajectoryMerger, merge_trajectory_store
 
 # main class
@@ -57,22 +60,70 @@ class DetectionTracker:
         print("\nInitializing ByteTrack Tracker...")
         self._tracker = ByteTrackTracker(self.config.tracker_config, yolo_model = self._detector.model)
 
-        # Initialize Camera Stabilizer (for trajectory coordinate correction)
-        if self.config.tracker_config.gmc_method and self.config.tracker_config.gmc_method != 'none':
-            print("Using ByteTrack's built-in GMC, disabling CameraStabilizer")
-            self._camera_stabilizer = None
-            self._stabilization_enabled = False
-        else:
-            print("Initializing Camera Stabilizer...")
+        if self.config.field_orientation_config.enabled:
+            print("Field orientation enabled - using standalone CameraStabilizer for per-frame motion")
+            print("  (Disabling ByteTrack GMC to get raw trajectories for field correction)")
             self._camera_stabilizer = CameraStabilizer(self.config.camera_config)
+            self._field_camera_stabilizer = None
             self._stabilization_enabled = self.config.camera_config.enabled
+            self._use_bytetrack_gmc = False
+        elif self.config.tracker_config.gmc_method and self.config.tracker_config.gmc_method != 'none':
+            # Standard mode: Let ByteTrack handle GMC for tracking, we'll handle stabilization separately
+            print(f"Using ByteTrack's built-in GMC (method: {self.config.tracker_config.gmc_method})")
+            self._camera_stabilizer = None
+            self._field_camera_stabilizer = None
+            self._stabilization_enabled = False
+            self._use_bytetrack_gmc = True
+        else:
+            # Fallback: use standalone CameraStabilizer
+            if self.config.field_camera_config.use_field_stabilizer:
+                print("Initializing Field-Specific Camera Stabilizer...")
+                self._field_camera_stabilizer = FieldCameraStabilizer(
+                    max_features=self.config.field_camera_config.max_features,
+                    smoothing_window=self.config.field_camera_config.smoothing_window,
+                    ransac_threshold=self.config.field_camera_config.ransac_threshold,
+                    motion_threshold=self.config.field_camera_config.motion_threshold,
+                    enabled=self.config.field_camera_config.enabled
+                )
+                self._camera_stabilizer = None
+                self._stabilization_enabled = self.config.field_camera_config.enabled
+            else:
+                print("Initializing Camera Stabilizer...")
+                self._camera_stabilizer = CameraStabilizer(self.config.camera_config)
+                self._field_camera_stabilizer = None
+                self._stabilization_enabled = self.config.camera_config.enabled
+            self._use_bytetrack_gmc = False
 
         # Initialize Trajectory Merger for post-processing fragmented tracks
         print("Initializing Trajectory Merger...")
-        self._trajectory_merger = TrajectoryMerger(spatial_threshold = self.config.tracker_config.merger_spatial_threshold,
-                                                   temporal_threshold=self.config.tracker_config.merger_temporal_threshold,
-                                                   confidence_threshold=self.config.tracker_config.merger_confidence_threshold)
+        self._trajectory_merger = TrajectoryMerger(
+            spatial_threshold=self.config.tracker_config.merger_spatial_threshold,
+            temporal_threshold=self.config.tracker_config.merger_temporal_threshold,
+            confidence_threshold=self.config.tracker_config.merger_confidence_threshold,
+            density_radius=self.config.tracker_config.merger_density_radius,
+            density_threshold=self.config.tracker_config.merger_density_threshold,
+            max_merges=self.config.tracker_config.merger_max_merges
+        )
         self._merger_enabled = self.config.tracker_config.enable_trajectory_merging
+
+        # Initialize Field Orientation Detector (for perspective correction)
+        # This runs ONCE per video on the first frame to correct camera angle
+        if self.config.field_orientation_config.enabled:
+            print("Initializing Field Orientation Detector...")
+            self._field_detector = FieldOrientationDetector(
+                video_width=self.config.field_orientation_config.video_width,
+                video_height=self.config.field_orientation_config.video_height,
+                canny_low=self.config.field_orientation_config.canny_low,
+                canny_high=self.config.field_orientation_config.canny_high,
+                hough_threshold=self.config.field_orientation_config.hough_threshold,
+                hough_min_line_length=self.config.field_orientation_config.hough_min_line_length,
+                hough_max_line_gap=self.config.field_orientation_config.hough_max_line_gap,
+                angle_tolerance=self.config.field_orientation_config.angle_tolerance,
+                min_field_lines=self.config.field_orientation_config.min_field_lines
+            )
+        else:
+            self._field_detector = None
+        self._field_orientation = None
 
         # Processing statistics
         self._total_processing_time = 0.0
@@ -119,13 +170,16 @@ class DetectionTracker:
         tracks = self._tracker.update(frame, filtered_detections, frame_id)
         self._total_tracks_output += len(tracks)
 
-        # Update camera stabilizer with current frame (for next frame)
         if self._stabilization_enabled and self._camera_stabilizer is not None:
             self._camera_stabilizer.update(frame)
 
             # Get motion stats
             motion_stats = self._camera_stabilizer.get_motion_stats()
             self._total_camera_motion = motion_stats.get('total_motion_pixels', 0)
+
+        # Update field-specific camera stabilizer if enabled
+        elif self._stabilization_enabled and self._field_camera_stabilizer is not None:
+            self._field_camera_stabilizer.update(frame)
 
         # Update statistics
         self._total_processing_time += time.time() - start_time
@@ -152,6 +206,9 @@ class DetectionTracker:
         self._tracker.reset()
         if self._camera_stabilizer is not None:
             self._camera_stabilizer.reset()
+        if self._field_detector:
+            self._field_detector.reset()
+        self._field_orientation = None
         self._total_processing_time = 0.0
         self._frames_processed = 0
         self._total_detections_raw = 0
@@ -176,6 +233,13 @@ class DetectionTracker:
             for frame_id, frame in video:
                 if frame_id >= total_frames:
                     break
+
+                # Detect field orientation on FIRST frame only
+                # This corrects for the initial camera angle/perspective
+                if frame_id == 0 and self._field_detector is not None and self.config.field_orientation_config.enabled:
+                    print("\nDetecting field orientation from first frame...")
+                    self._field_orientation = self._field_detector.detect_and_compute(frame)
+                    print(f"Field orientation detected with confidence: {self._field_orientation.confidence:.2f}")
 
                 # Process frame
                 tracks = self.process_frame(frame, frame_id)
@@ -212,12 +276,17 @@ class DetectionTracker:
             print("\nApplying trajectory post-processing to merge fragmented tracks...")
             traj_store = self._trajectory_merger.merge_trajectories(traj_store)
 
+        # Apply field orientation correction to transform to orthogonal coordinates
+        # This runs ONCE after tracking to correct the camera's initial perspective
+        if self._field_detector is not None and self.config.field_orientation_config.enabled:
+            traj_store = self._apply_field_orientation_correction(traj_store)
+
         # stabilizing all trajectories to first frame
         if self._stabilization_enabled and self._camera_stabilizer is not None:
             print("\nApplying standalone camera stabilization to trajectories...")
             traj_store = self._camera_stabilizer.stabilize_trajectory_store(traj_store)
         else:
-            print("\nSkipping standalone camera stabilization")
+            print("\nSkipping standalone camera stabilization (using ByteTrack's built-in GMC)")
 
         # filtering out noise trajs
         if filter_short_trajectories:
@@ -252,6 +321,87 @@ class DetectionTracker:
 
         return filtered_store
     
+    def _apply_field_orientation_correction(self, store: TrajectoryStore) -> TrajectoryStore:
+        """
+        Apply camera motion compensation AND field orientation correction to all trajectory coordinates.
+
+        This handles two issues:
+        1. Camera motion (zoom/pan): CameraStabilizer tracked this frame-by-frame, we subtract it
+        2. Camera angle (perspective): FieldOrientationDetector computed a one-time rotation
+
+        The order matters:
+        - Step 1: For each detection, find cumulative camera transform since frame 0
+        - Step 2: Apply inverse camera transform to get position relative to frame 0
+        - Step 3: Apply field orientation rotation to orthogonalize coordinates
+
+        Args:
+            store: TrajectoryStore with raw trajectories
+
+        Returns:
+            TrajectoryStore with corrected coordinates
+        """
+        if self._field_detector is None:
+            print("\nSkipping field correction (no field orientation detector)")
+            return store
+
+        print(f"\nApplying camera motion + field orientation correction...")
+
+        # Get field orientation data
+        field_homography = self._field_orientation.homography if self._field_orientation else np.eye(3)
+        field_angle = self._field_orientation.field_angle if self._field_orientation else 0.0
+
+        print(f"  Field angle: {field_angle:.1f}°")
+
+        corrected_store = TrajectoryStore()
+
+        for traj in store.get_all_trajectories():
+            for det in traj.detections:
+                x, y = det.center[0], det.center[1]
+                frame_id = det.frame_id
+
+                # Step 1: Apply camera motion compensation
+                # Get cumulative camera transform from first frame (frame 0) to current frame
+                if self._camera_stabilizer is not None and self._stabilization_enabled:
+                    camera_transform = self._camera_stabilizer.get_cumulative_transform(frame_id)
+                    if camera_transform is not None:
+                        # Apply inverse of camera transform to get position as if camera hadn't moved
+                        # The camera transform maps frame_0 coordinates to frame_t coordinates
+                        # To reverse this, we apply the inverse
+                        x, y = self._apply_transform(x, y, camera_transform)
+
+                # Step 2: Apply field orientation rotation
+                # Rotate coordinates to make yard lines horizontal
+                x, y = self._field_detector.apply_homography(x, y, field_homography)
+
+                # Create corrected detection with new top-left corner
+                det_width = det.width
+                det_height = det.height
+                corrected_det = Detection(
+                    frame_id=det.frame_id,
+                    x=x - det_width / 2,
+                    y=y - det_height / 2,
+                    width=det_width,
+                    height=det_height,
+                    confidence=det.confidence
+                )
+
+                corrected_store.add_detection(traj.track_id, corrected_det)
+
+        print(f"  Corrected {store.num_trajectories} trajectories")
+        return corrected_store
+    
+    def _apply_transform(self, x: float, y: float, transform: np.ndarray) -> Tuple[float, float]:
+        """
+        Apply a 3x3 homography transform to a point.
+        """
+        point = np.array([x, y, 1.0])
+        transformed = transform @ point
+
+        if abs(transformed[2]) > 1e-6:
+            return (float(transformed[0] / transformed[2]), float(transformed[1] / transformed[2]))
+        else:
+            return (float(transformed[0]), float(transformed[1]))
+    
     def _filter_off_field_trajectories(self, store: TrajectoryStore, field_bounds: Optional[Dict] = None, video_metadata = None) -> TrajectoryStore:
         """
         Remove trajectories that spend the majority of their time off the field.
@@ -274,7 +424,7 @@ class DetectionTracker:
                             if (field_bounds['min_x'] <= det.center[0] <= field_bounds['max_x']
                                 and field_bounds['min_y'] <= det.center[1] <= field_bounds['max_y']))
  
-            if in_bounds / max(1, total) >= 0.5:
+            if in_bounds / max(1, total) >= 0.25:
                 for det in trajectory.detections:
                     filtered_store.add_detection(trajectory.track_id, det)
             else:
@@ -373,9 +523,11 @@ class DetectionTracker:
     
     def get_camera_motion_stats(self) -> Dict:
         """Get camera motion statistics."""
-        if self._camera_stabilizer is None:
+        if self._camera_stabilizer is None and self._field_camera_stabilizer is None:
             # Using ByteTrack's built-in GMC - stats are handled internally
             return {'using_bytetrack_gmc': True, 'total_motion_pixels': self._total_camera_motion}
+        elif self._field_camera_stabilizer is not None:
+            return {'using_field_stabilizer': True, 'frame_count': self._field_camera_stabilizer._frame_count}
         return self._camera_stabilizer.get_motion_stats()
 
     def get_statistics(self) -> Dict:
@@ -385,6 +537,10 @@ class DetectionTracker:
         tracker_stats = self._tracker.get_statistics()
         if self._camera_stabilizer is not None:
             motion_stats = self._camera_stabilizer.get_motion_stats()
+        elif self._camera_stabilizer is not None:
+            motion_stats = self._camera_stabilizer.get_motion_stats()
+        else:
+            motion_stats = {'using_bytetrack_gmc': True}
 
         stats = {'frames_processed': self._frames_processed,
                 'total_processing_time': self._total_processing_time,
@@ -406,6 +562,12 @@ class DetectionTracker:
         self._tracker.reset()
         if self._camera_stabilizer is not None:
             self._camera_stabilizer.reset()
+        if self._field_camera_stabilizer is not None:
+            self._field_camera_stabilizer.reset()
+        if self._field_detector is not None:
+            self._field_detector.reset()
+        self._field_orientation = None
+        # Reset NFL filter's area history tracking
         self._nfl_filter.reset_area_history()
         self._total_processing_time = 0.0
         self._frames_processed = 0

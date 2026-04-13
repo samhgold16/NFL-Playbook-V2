@@ -88,6 +88,64 @@ class CameraStabilizerConfig:
             raise ValueError("max_features must be at least 10")
         if self.smoothing_window < 1:
             raise ValueError("smoothing_window must be at least 1")
+        
+@dataclass
+class FieldCameraStabilizerConfig:
+    """
+    Configuration for field-specific camera stabilization.
+
+    This stabilizer uses field features (yard lines, hash marks) instead of
+    general scene features for more accurate camera motion estimation.
+    """
+    enabled: bool = True  # Enable field-specific stabilization (disabled if using ByteTrack GMC)
+    use_field_stabilizer: bool = True  # Use FieldCameraStabilizer instead of regular CameraStabilizer
+    max_features: int = 200  # Max field features to track
+    smoothing_window: int = 10  # Frames to average homography over
+    ransac_threshold: float = 3.0  # RANSAC reprojection threshold
+    motion_threshold: float = 1.0  # Skip if motion < 1 pixel
+    min_field_features: int = 20  # Minimum features before considering field detection valid
+
+    def __post_init__(self):
+        """Validate configuration."""
+        if self.max_features < 10:
+            raise ValueError("max_features must be at least 10")
+        if self.smoothing_window < 1:
+            raise ValueError("smoothing_window must be at least 1")
+        
+@dataclass
+class FieldOrientationConfig:
+    """
+    Configuration for field orientation detection and perspective correction.
+    """
+    enabled: bool = True  # Enable field orientation detection
+    video_width: int = 1920  # Video frame width
+    video_height: int = 984  # Video frame height
+
+    # Edge detection parameters (for Hough line detection)
+    canny_low: int = 50  # Lower Canny threshold
+    canny_high: int = 150  # Upper Canny threshold
+
+    # Hough line transform parameters
+    hough_threshold: int = 100  # Minimum votes for line detection
+    hough_min_line_length: int = 100  # Minimum line length in pixels
+    hough_max_line_gap: int = 50  # Maximum gap between line segments
+
+    # Line classification
+    angle_tolerance: float = 15.0  # Degrees - lines within this of horizontal/vertical are field lines
+
+    # Detection confidence
+    min_field_lines: int = 3  # Minimum lines to detect for valid field orientation
+
+    # Output scaling
+    target_field_width: int = 1920  # Output width (pixels per 53.3 yards)
+    target_field_height: int = 984  # Output height (pixels per 100 yards)
+
+    def __post_init__(self):
+        """Validate configuration."""
+        if self.canny_low < 0 or self.canny_high < 0:
+            raise ValueError("Canny thresholds must be non-negative")
+        if self.canny_low >= self.canny_high:
+            raise ValueError("canny_low must be less than canny_high")
 
 
 # =============================================================================
@@ -148,7 +206,10 @@ class TrackerConfig:
     enable_trajectory_merging: bool = True  # Enable/disable trajectory merging
     merger_spatial_threshold: float = 150.0  # Max distance (pixels) between trajectory end and next start
     merger_temporal_threshold: int = 45  # Max frame gap to consider for merging (~0.75 seconds at 60fps)
-    merger_confidence_threshold: float = 0.75  # Minimum score to perform merge
+    merger_confidence_threshold: float = 0.25  # Minimum score to perform merge
+    merger_density_radius: float = 200.0  # Neighborhood radius (pixels) for crowd density check
+    merger_density_threshold: int = 4  # Max endpoints in radius before region is considered crowded
+    merger_max_merges: int = 2  # Maximum merges per trajectory to prevent chain merging
 
     def __post_init__(self):
         """Validate configuration."""
@@ -175,6 +236,8 @@ class DetectionTrackerConfig:
     tracker_config: Optional[TrackerConfig] = None
     nfl_filter_config: Optional[NFLDetectionFilterConfig] = None
     camera_config: Optional[CameraStabilizerConfig] = None
+    field_camera_config: Optional[FieldCameraStabilizerConfig] = None
+    field_orientation_config: Optional[FieldOrientationConfig] = None
 
     # output options
     verbose: bool = True
@@ -192,6 +255,10 @@ class DetectionTrackerConfig:
             self.nfl_filter_config = NFLDetectionFilterConfig()
         if self.camera_config is None:
             self.camera_config = CameraStabilizerConfig()
+        if self.field_camera_config is None:
+            self.field_camera_config = FieldCameraStabilizerConfig()
+        if self.field_orientation_config is None:
+            self.field_orientation_config = FieldOrientationConfig()
 
 # defining nfl field, used later
 @dataclass
@@ -222,24 +289,37 @@ NFL_FIELD = NFLFieldConstants()
 # setting up overall pipeline config with all defaults, can be overridden by user when initializing pipeline
 def get_pipeline_config() -> DetectionTrackerConfig:
 
-    return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8l.pt',
+    return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8m.pt',
                                                                    confidence_threshold = 0.05,
-                                                                   imgsz = 960), # 1280
-                                  tracker_config = TrackerConfig(track_high_thresh = 0.5, track_low_thresh = 0.1,
+                                                                   imgsz = 1280), # 1280
+                                  tracker_config = TrackerConfig(track_high_thresh = 0.5, track_low_thresh = 0.05,
                                                                 new_track_thresh = 0.15, track_buffer = 90,
-                                                                match_thresh = 0.6, gmc_method = 'sift',
+                                                                match_thresh = 0.65, gmc_method = 'sift', # sift, or NONE for field cameera config logic
                                                                 gmc_downscale = 2.0, min_trajectory_length = 30,
                                                                 max_trajectory_gap = 50, confidence_threshold = 0.05,
-                                                                filter_ghost_boxes = True, fuse_score = True,
+                                                                filter_ghost_boxes = False, fuse_score = True,
                                                                 iou_threshold = 0.4,
                                                                 enable_trajectory_merging = True,
                                                                 merger_spatial_threshold = 300.0,
-                                                                merger_temporal_threshold = 90,
-                                                                merger_confidence_threshold = 0.5),
+                                                                merger_temporal_threshold = 45,
+                                                                merger_confidence_threshold = 0.25,
+                                                                merger_density_radius = 300.0,
+                                                                merger_density_threshold = 4,
+                                                                merger_max_merges = 4),
                                   nfl_filter_config = NFLDetectionFilterConfig(merge_iou_threshold = 0.4, min_confidence = 0.15, low_confidence = 0.05),
-                                                                                                        # ORB instead??
-                                  camera_config = CameraStabilizerConfig(enabled = True, max_features = 400, # consider featuremethod sift or orb or shi-tomasi
-                                                                         ransac_threshold = 4.0, smoothing_window = 10, motion_threshold = 1.0),
+                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 400, # consider featuremethod sift or orb or shi-tomasi
+                                                                         ransac_threshold = 3.0, smoothing_window = 5, motion_threshold = 1.0),
+                                  field_camera_config = FieldCameraStabilizerConfig(enabled = False, use_field_stabilizer = False),
+                                  field_orientation_config = FieldOrientationConfig(enabled = True,
+                                                                                    video_width = 1920,
+                                                                                    video_height = 984,
+                                                                                    canny_low = 50,
+                                                                                    canny_high = 150,
+                                                                                    hough_threshold = 100,
+                                                                                    hough_min_line_length = 100,
+                                                                                    hough_max_line_gap = 50,
+                                                                                    angle_tolerance = 15.0,
+                                                                                    min_field_lines = 3),
                                   verbose = True,
                                   progress_interval = 50,
                                   save_video = True,

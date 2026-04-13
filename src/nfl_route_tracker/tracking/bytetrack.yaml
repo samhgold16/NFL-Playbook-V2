@@ -8,12 +8,12 @@
 
                     # Detection confidence thresholds
                     track_high_thresh: 0.5
-                    track_low_thresh: 0.1
+                    track_low_thresh: 0.05
                     new_track_thresh: 0.15
 
                     # Occlusion handling
                     track_buffer: 90
-                    match_thresh: 0.6
+                    match_thresh: 0.65
                     fuse_score: True
 
                     # Global Motion Compensation (camera stabilization)
