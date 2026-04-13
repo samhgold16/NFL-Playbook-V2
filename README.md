@@ -37,7 +37,9 @@ src/nfl_route_tracker/
 │   ├── bytetrack_tracker.py    # ByteTrack tracker
 │   ├── detection_tracker.py    # Main pipeline orchestrator
 │   ├── trajectory.py           # Data structures (Detection, Trajectory, TrajectoryStore)
-│   ├── camera_stabilizer.py    # Properly mapping trajectories
+│   ├── camera_stabilizer.py    # Properly accounting for camera movement for trajectories
+│   ├── trajectory_merger.py    # Merging unique trajectories belonging to same player
+│   ├── field_orientation_detector.py  #  Properly accounting for field angle for trajectories
 │   └── bytetrack.yaml          # Used for ByteTrack
 │
 └── visualizations/
