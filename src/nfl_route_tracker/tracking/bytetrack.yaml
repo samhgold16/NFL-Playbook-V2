@@ -18,7 +18,7 @@
 
                     # Global Motion Compensation (camera stabilization)
                     # Options: 'ecc' (best), 'sift' (balanced), 'orb' (fastest), 'none' (disabled)
-                    gmc_method: sift
+                    gmc_method: None
                     gmc_downscale: 2.0
 
                     # ByteTrack specific

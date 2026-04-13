@@ -90,29 +90,6 @@ class CameraStabilizerConfig:
             raise ValueError("smoothing_window must be at least 1")
         
 @dataclass
-class FieldCameraStabilizerConfig:
-    """
-    Configuration for field-specific camera stabilization.
-
-    This stabilizer uses field features (yard lines, hash marks) instead of
-    general scene features for more accurate camera motion estimation.
-    """
-    enabled: bool = True  # Enable field-specific stabilization (disabled if using ByteTrack GMC)
-    use_field_stabilizer: bool = True  # Use FieldCameraStabilizer instead of regular CameraStabilizer
-    max_features: int = 200  # Max field features to track
-    smoothing_window: int = 10  # Frames to average homography over
-    ransac_threshold: float = 3.0  # RANSAC reprojection threshold
-    motion_threshold: float = 1.0  # Skip if motion < 1 pixel
-    min_field_features: int = 20  # Minimum features before considering field detection valid
-
-    def __post_init__(self):
-        """Validate configuration."""
-        if self.max_features < 10:
-            raise ValueError("max_features must be at least 10")
-        if self.smoothing_window < 1:
-            raise ValueError("smoothing_window must be at least 1")
-        
-@dataclass
 class FieldOrientationConfig:
     """
     Configuration for field orientation detection and perspective correction.
@@ -236,7 +213,6 @@ class DetectionTrackerConfig:
     tracker_config: Optional[TrackerConfig] = None
     nfl_filter_config: Optional[NFLDetectionFilterConfig] = None
     camera_config: Optional[CameraStabilizerConfig] = None
-    field_camera_config: Optional[FieldCameraStabilizerConfig] = None
     field_orientation_config: Optional[FieldOrientationConfig] = None
 
     # output options
@@ -255,8 +231,6 @@ class DetectionTrackerConfig:
             self.nfl_filter_config = NFLDetectionFilterConfig()
         if self.camera_config is None:
             self.camera_config = CameraStabilizerConfig()
-        if self.field_camera_config is None:
-            self.field_camera_config = FieldCameraStabilizerConfig()
         if self.field_orientation_config is None:
             self.field_orientation_config = FieldOrientationConfig()
 
@@ -289,27 +263,27 @@ NFL_FIELD = NFLFieldConstants()
 # setting up overall pipeline config with all defaults, can be overridden by user when initializing pipeline
 def get_pipeline_config() -> DetectionTrackerConfig:
 
-    return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8m.pt',
+    return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8l.pt',
                                                                    confidence_threshold = 0.05,
-                                                                   imgsz = 1280), # 1280
+                                                                   imgsz = 960), # 1280
                                   tracker_config = TrackerConfig(track_high_thresh = 0.5, track_low_thresh = 0.05,
                                                                 new_track_thresh = 0.15, track_buffer = 90,
-                                                                match_thresh = 0.65, gmc_method = 'sift', # sift, or NONE for field cameera config logic
+                                                                match_thresh = 0.65,
+                                                                gmc_method = None,  # CameraStabilizer handles motion
                                                                 gmc_downscale = 2.0, min_trajectory_length = 30,
                                                                 max_trajectory_gap = 50, confidence_threshold = 0.05,
                                                                 filter_ghost_boxes = False, fuse_score = True,
-                                                                iou_threshold = 0.4,
+                                                                iou_threshold = 0.35,
                                                                 enable_trajectory_merging = True,
-                                                                merger_spatial_threshold = 300.0,
+                                                                merger_spatial_threshold = 150.0,
                                                                 merger_temporal_threshold = 45,
-                                                                merger_confidence_threshold = 0.25,
-                                                                merger_density_radius = 300.0,
+                                                                merger_confidence_threshold = 0.5,
+                                                                merger_density_radius = 200.0,
                                                                 merger_density_threshold = 4,
-                                                                merger_max_merges = 4),
-                                  nfl_filter_config = NFLDetectionFilterConfig(merge_iou_threshold = 0.4, min_confidence = 0.15, low_confidence = 0.05),
-                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 400, # consider featuremethod sift or orb or shi-tomasi
+                                                                merger_max_merges = 2),
+                                  nfl_filter_config = NFLDetectionFilterConfig(merge_iou_threshold = 0.35, min_confidence = 0.15, low_confidence = 0.05),
+                                  camera_config = CameraStabilizerConfig(enabled = True, feature_method = 'shi-tomasi', max_features = 400,
                                                                          ransac_threshold = 3.0, smoothing_window = 5, motion_threshold = 1.0),
-                                  field_camera_config = FieldCameraStabilizerConfig(enabled = False, use_field_stabilizer = False),
                                   field_orientation_config = FieldOrientationConfig(enabled = True,
                                                                                     video_width = 1920,
                                                                                     video_height = 984,
