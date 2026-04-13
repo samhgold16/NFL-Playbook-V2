@@ -251,17 +251,17 @@ class DetectionTracker:
             print("\nApplying trajectory post-processing to merge fragmented tracks...")
             traj_store = self._trajectory_merger.merge_trajectories(traj_store)
 
+        if self._stabilization_enabled and self._camera_stabilizer is not None:
+            print("\nApplying camera stabilization to trajectories...")
+            traj_store = self._camera_stabilizer.stabilize_trajectory_store(traj_store)
+        else:
+            print("\nSkipping camera stabilization")
+
         # Apply field orientation correction to transform to orthogonal coordinates
         # This runs ONCE after tracking to correct the camera's initial perspective
         if self._field_detector is not None and self.config.field_orientation_config.enabled:
+            print("\nApplying field orientation rotation...")
             traj_store = self._apply_field_orientation_correction(traj_store)
-
-        # stabilizing all trajectories to first frame
-        if self._stabilization_enabled and self._camera_stabilizer is not None:
-            print("\nApplying standalone camera stabilization to trajectories...")
-            traj_store = self._camera_stabilizer.stabilize_trajectory_store(traj_store)
-        else:
-            print("\nSkipping standalone camera stabilization (using ByteTrack's built-in GMC)")
 
         # filtering out noise trajs
         if filter_short_trajectories:
@@ -304,8 +304,6 @@ class DetectionTracker:
             print("\nSkipping field correction (no field orientation detector)")
             return store
 
-        print(f"\nApplying camera motion + field orientation correction...")
-
         # Get field orientation data
         field_homography = self._field_orientation.homography if self._field_orientation else np.eye(3)
         field_angle = self._field_orientation.field_angle if self._field_orientation else 0.0
@@ -316,20 +314,10 @@ class DetectionTracker:
 
         for traj in store.get_all_trajectories():
             for det in traj.detections:
+                # Get center coordinates
                 x, y = det.center[0], det.center[1]
-                frame_id = det.frame_id
 
-                # Step 1: Apply camera motion compensation
-                # Get cumulative camera transform from first frame (frame 0) to current frame
-                if self._camera_stabilizer is not None and self._stabilization_enabled:
-                    camera_transform = self._camera_stabilizer.get_cumulative_transform(frame_id)
-                    if camera_transform is not None:
-                        # Apply inverse of camera transform to get position as if camera hadn't moved
-                        # The camera transform maps frame_0 coordinates to frame_t coordinates
-                        # To reverse this, we apply the inverse
-                        x, y = self._apply_transform(x, y, camera_transform)
-
-                # Step 2: Apply field orientation rotation
+                # Apply field orientation rotation only
                 # Rotate coordinates to make yard lines horizontal
                 x, y = self._field_detector.apply_homography(x, y, field_homography)
 
@@ -522,7 +510,6 @@ class DetectionTracker:
         if self._field_detector is not None:
             self._field_detector.reset()
         self._field_orientation = None
-        # Reset NFL filter's area history tracking
         self._nfl_filter.reset_area_history()
         self._total_processing_time = 0.0
         self._frames_processed = 0

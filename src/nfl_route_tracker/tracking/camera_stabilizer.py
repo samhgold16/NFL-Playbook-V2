@@ -16,8 +16,6 @@ import sys
 # Import detection result type
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from nfl_route_tracker.detection.player_detector import DetectionResult
-
-from nfl_route_tracker.detection.player_detector import DetectionResult
 from nfl_route_tracker.tracking.trajectory import Detection, TrajectoryStore, Trajectory
 from nfl_route_tracker.core.config import CameraStabilizerConfig
 
@@ -91,15 +89,6 @@ class CameraStabilizer:
     def get_cumulative_transform(self, frame_id: int) -> Optional[np.ndarray]:
         """
         Get the cumulative transform H_{0 -> frame_id} for a specific frame.
-
-        This allows correcting trajectory points to their position as if the
-        camera hadn't moved since frame 0.
-
-        Args:
-            frame_id: The frame number to get the transform for
-
-        Returns:
-            3x3 homography matrix or None if not available
         """
         if frame_id < 0 or frame_id >= len(self._frame_transforms):
             return None
@@ -165,7 +154,40 @@ class CameraStabilizer:
 
         for trajectory in store.get_all_trajectories():
             for detection in trajectory.detections:
-                stabilized_det = self.stabilize_trajectory_detection(detection)
+                frame_id = detection.frame_id
+
+                # Get the cumulative transform from frame 0 to current frame
+                # This tells us where a frame-0 point appears in frame_id
+                cumulative_transform = self.get_cumulative_transform(frame_id)
+
+                if cumulative_transform is None:
+                    # If no transform available, use current frame's inverse
+                    sx, sy, sw, sh = self.stabilize_bbox(
+                        detection.x, detection.y, detection.width, detection.height
+                    )
+                else:
+                    # Apply the stored cumulative inverse to map back to frame 0
+                    x, y = detection.center[0], detection.center[1]
+                    point = np.array([x, y, 1.0])
+                    transformed = cumulative_transform @ point
+                    if abs(transformed[2]) > 1e-6:
+                        tx, ty = transformed[0] / transformed[2], transformed[1] / transformed[2]
+                    else:
+                        tx, ty = transformed[0], transformed[1]
+
+                    # Calculate stabilized bounding box (keeping same size)
+                    det_width = detection.width
+                    det_height = detection.height
+                    sx = tx - det_width / 2
+                    sy = ty - det_height / 2
+                    sw = det_width
+                    sh = det_height
+
+                stabilized_det = Detection(
+                    frame_id=frame_id,
+                    x=sx, y=sy, width=sw, height=sh,
+                    confidence=detection.confidence
+                )
                 stabilized_store.add_detection(trajectory.track_id, stabilized_det)
 
         return stabilized_store
@@ -284,6 +306,7 @@ class CameraStabilizer:
         """
         Estimate homography between two sets of matched points.
         """
+
         if len(prev_pts) < 4:
             return None
 
@@ -309,21 +332,31 @@ class CameraStabilizer:
         """
         dx = H[0, 2]
         dy = H[1, 2]
+
+        # Extract rotation angle from the rotation matrix portion
+        # Using atan2(H[1,0], H[0,0]) gives the rotation angle
+        # This works because the matrix is [[cos θ, -sin θ], [sin θ, cos θ]] scaled
         da = np.arctan2(H[1, 0], H[0, 0])
 
         # Ignore sub-pixel jitter
         if np.sqrt(dx**2 + dy**2) < self.config.motion_threshold:
             return np.eye(3, dtype=np.float64)
 
+        # Store for smoothing
         self._homography_history.append((dx, dy, da))
+
+        # Maintain rolling window
         if len(self._homography_history) > self.config.smoothing_window:
             self._homography_history.pop(0)
 
+        # Compute smoothed values
         avg_dx = float(np.mean([h[0] for h in self._homography_history]))
         avg_dy = float(np.mean([h[1] for h in self._homography_history]))
         avg_da = float(np.mean([h[2] for h in self._homography_history]))
 
+        # Reconstruct rotation matrix from smoothed angle
         cos_a, sin_a = np.cos(avg_da), np.sin(avg_da)
+
         return np.array([[cos_a, -sin_a, avg_dx],
                          [sin_a,  cos_a, avg_dy],
                          [0.0,    0.0,   1.0]], dtype = np.float64)

@@ -7,9 +7,9 @@
                     tracker_type: bytetrack
 
                     # Detection confidence thresholds
-                    track_high_thresh: 0.5
+                    track_high_thresh: 0.45
                     track_low_thresh: 0.05
-                    new_track_thresh: 0.15
+                    new_track_thresh: 0.1
 
                     # Occlusion handling
                     track_buffer: 90
