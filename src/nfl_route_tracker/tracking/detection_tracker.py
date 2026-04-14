@@ -30,8 +30,8 @@ from nfl_route_tracker.detection.player_detector import DetectionResult, PlayerD
 from nfl_route_tracker.detection.nfl_filter import NFLDetectionFilter
 from nfl_route_tracker.tracking.bytetrack_tracker import ByteTrackTracker, Track
 from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer
-from nfl_route_tracker.tracking.fixed_field_orientation_detector import FixedFieldOrientationDetector
-from nfl_route_tracker.tracking.final_field_transform import FinalFieldTransform
+from nfl_route_tracker.tracking.field_orientation_detector import FixedFieldOrientationDetector
+from nfl_route_tracker.tracking.field_transform import FinalFieldTransform
 from nfl_route_tracker.tracking.trajectory_merger import TrajectoryMerger, merge_trajectory_store
 
 # main class

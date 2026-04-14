@@ -120,7 +120,7 @@ class FixedFieldOrientationDetector:
         # Create angle histogram for diagnostics
         angle_histogram = {}
         for angle in all_angles:
-            bin_angle = round(angle / 10) * 10  # Bin by 10 degrees
+            bin_angle = round(angle / 5) * 5  # Bin by 5 degrees
             angle_histogram[bin_angle] = angle_histogram.get(bin_angle, 0) + 1
 
         print(f"  Angle distribution: {dict(sorted(angle_histogram.items()))}")
