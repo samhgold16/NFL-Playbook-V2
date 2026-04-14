@@ -292,7 +292,7 @@ def get_pipeline_config() -> DetectionTrackerConfig:
                                                                                     hough_threshold = 100,
                                                                                     hough_min_line_length = 500,
                                                                                     hough_max_line_gap = 100,
-                                                                                    angle_tolerance = 30.0,
+                                                                                    angle_tolerance = 15.0,
                                                                                     min_field_lines = 5),
                                   verbose = True,
                                   progress_interval = 50,

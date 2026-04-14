@@ -194,7 +194,7 @@ class FieldOrientationDetector:
             x1, y1, x2, y2 = line[0]
 
             # Skip very short lines
-            length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+            length = np.sqrt((x2 - x1)**2 + (y2 - x1)**2)
             if length < 50:
                 continue
 

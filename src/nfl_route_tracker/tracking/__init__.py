@@ -10,6 +10,9 @@ from .detection_tracker import DetectionTracker
 from .bytetrack_tracker import ByteTrackTracker, Track
 from .trajectory_merger import TrajectoryMerger, merge_trajectory_store
 from .field_orientation_detector import FieldOrientationDetector, FieldOrientation
+from .fixed_field_orientation_detector import FixedFieldOrientationDetector, FixedFieldOrientation
+from .corrected_field_transform import CorrectedFieldAxisTransform, create_corrected_transform
+from .final_field_transform import FinalFieldTransform, create_final_transform
 
 # Import DetectionTrackerConfig from core.config
 from ..core.config import (DetectionTrackerConfig,
@@ -33,6 +36,12 @@ __all__ = [
     # Stabilization/Orientation
     'FieldOrientationDetector',
     'FieldOrientation',
+    'FixedFieldOrientationDetector',
+    'FixedFieldOrientation',
+    'CorrectedFieldAxisTransform',
+    'create_corrected_transform',
+    'FinalFieldTransform',
+    'create_final_transform',
 
     # Trajectory processing
     'TrajectoryMerger',
