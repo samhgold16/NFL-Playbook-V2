@@ -89,6 +89,15 @@ class CameraStabilizer:
     def get_cumulative_transform(self, frame_id: int) -> Optional[np.ndarray]:
         """
         Get the cumulative transform H_{0 -> frame_id} for a specific frame.
+
+        This allows correcting trajectory points to their position as if the
+        camera hadn't moved since frame 0.
+
+        Args:
+            frame_id: The frame number to get the transform for
+
+        Returns:
+            3x3 homography matrix or None if not available
         """
         if frame_id < 0 or frame_id >= len(self._frame_transforms):
             return None
@@ -146,6 +155,10 @@ class CameraStabilizer:
     def stabilize_trajectory_store(self, store: TrajectoryStore) -> TrajectoryStore:
         """
         Stabilize every detection in every trajectory to first-frame coordinates.
+
+        This method uses the per-frame cumulative transforms stored during update()
+        to correct each detection to its position as if the camera hadn't moved
+        from the first frame.
         """
         if not self.config.enabled:
             return store
@@ -306,7 +319,6 @@ class CameraStabilizer:
         """
         Estimate homography between two sets of matched points.
         """
-
         if len(prev_pts) < 4:
             return None
 
@@ -329,6 +341,20 @@ class CameraStabilizer:
     def _smooth_transform(self, H: np.ndarray) -> np.ndarray:
         """
         Smooth the per-frame homography using a moving-average window.
+
+        This extracts translation and rotation separately for more stable smoothing.
+        The homography matrix H contains:
+        - H[0,2], H[1,2]: translation (dx, dy)
+        - H[0,0], H[0,1], H[1,0], H[1,1]: rotation + scale + shear
+
+        For camera panning (pure translation + small rotation), we extract:
+        - dx, dy: translation components
+        - da: rotation angle using atan2 on rotation matrix elements
+
+        Note: Using arctan2 on H[1,0] and H[0,0] is correct for extracting
+        rotation from a rotation+scaled matrix because:
+        R = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]] * scale
+        So arctan2(R[1,0], R[0,0]) = arctan2(sin(θ)*scale, cos(θ)*scale) = θ
         """
         dx = H[0, 2]
         dy = H[1, 2]

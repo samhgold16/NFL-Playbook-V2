@@ -168,6 +168,10 @@ class FixedFieldOrientationDetector:
 
         This is the KEY FIX: We used to filter out non-horizontal lines.
         Now we use ALL lines to find the dominant angle.
+
+        CRITICAL: Normalize to 0-90° range because:
+        - 0° = 180° (horizontal line has no direction)
+        - 90° = 270° (vertical line has no direction)
         """
         angles = []
 
@@ -182,12 +186,19 @@ class FixedFieldOrientationDetector:
             # Compute angle using atan2
             angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
 
-            # Normalize to 0-180 range (lines have no direction)
+            # Normalize to 0-90° range (lines have NO direction/orientation)
+            # First normalize to 0-180
             while angle < 0:
                 angle += 180
             while angle >= 180:
                 angle -= 180
 
+            # Then fold 180° to 0° (horizontal lines are directionless)
+            if angle >= 90:
+                angle = 180 - angle
+
+            # Now angle is in 0-90 range where:
+            # 0° = horizontal, 90° = vertical
             angles.append(angle)
 
         return angles
@@ -198,6 +209,10 @@ class FixedFieldOrientationDetector:
 
         Yard lines will form a cluster around a specific angle.
         We find this by looking at the histogram peaks.
+
+        CRITICAL: In All-22 footage, yard lines should be in 65-90° range.
+        We prioritize this range over horizontal lines (0°) because
+        the sideline camera creates the characteristic diagonal yard lines.
         """
         if not angles:
             return 0.0
@@ -208,7 +223,26 @@ class FixedFieldOrientationDetector:
             bin_angle = round(angle / 5) * 5
             bins[bin_angle] = bins.get(bin_angle, 0) + 1
 
-        # Find the bin with most lines (the dominant angle)
+        # Count lines in expected yard line range (65-90°)
+        # Yard lines in All-22 footage are typically 75-85°
+        yard_line_range_count = 0
+        yard_line_range_angles = []
+
+        for bin_angle, count in bins.items():
+            if 65 <= bin_angle <= 90:
+                yard_line_range_count += count
+                yard_line_range_angles.append((bin_angle, count))
+
+        # Find the best angle in the yard line range
+        best_yard_line_angle = 0
+        best_yard_line_count = 0
+
+        for bin_angle, count in yard_line_range_angles:
+            if count > best_yard_line_count:
+                best_yard_line_count = count
+                best_yard_line_angle = bin_angle
+
+        # Find the overall dominant angle
         max_count = 0
         dominant_angle = 0
 
@@ -217,7 +251,22 @@ class FixedFieldOrientationDetector:
                 max_count = count
                 dominant_angle = bin_angle
 
-        # Return dominant angle
+        # DECISION LOGIC:
+        # If there are enough lines in the yard line range (>= 5 lines or >= 30% of dominant),
+        # and the yard line angle is at least 5 lines, use the yard line angle
+        # This prioritizes the slanted yard lines characteristic of All-22 footage
+
+        if yard_line_range_count >= 5 and best_yard_line_count >= 5:
+            # Use weighted average of yard line range angles for better precision
+            if yard_line_range_count > 0:
+                weighted_sum = sum(bin_angle * count for bin_angle, count in yard_line_range_angles)
+                return weighted_sum / yard_line_range_count
+            return best_yard_line_angle
+        elif dominant_angle == 0 and yard_line_range_count >= 3:
+            # Fallback: if 0° is dominant but we have yard line evidence, use yard line angle
+            weighted_sum = sum(bin_angle * count for bin_angle, count in yard_line_range_angles)
+            return weighted_sum / yard_line_range_count
+
         return dominant_angle
 
     def _compute_rotation_homography(self, rotation_angle: float) -> np.ndarray:
@@ -288,6 +337,13 @@ class FixedFieldOrientationDetector:
             all_lines_found=0,
             angle_histogram={}
         )
+
+    def reset(self) -> None:
+        """Reset detector state for processing a new video."""
+        self._cached_homography = None
+        self._cached_orientation = None
+        self._last_frame = None
+        self._all_detected_lines = []
 
 
 def create_fixed_detector(**kwargs) -> FixedFieldOrientationDetector:

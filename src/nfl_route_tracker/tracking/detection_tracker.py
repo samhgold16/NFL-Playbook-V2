@@ -30,7 +30,8 @@ from nfl_route_tracker.detection.player_detector import DetectionResult, PlayerD
 from nfl_route_tracker.detection.nfl_filter import NFLDetectionFilter
 from nfl_route_tracker.tracking.bytetrack_tracker import ByteTrackTracker, Track
 from nfl_route_tracker.tracking.camera_stabilizer import CameraStabilizer
-from nfl_route_tracker.tracking.field_orientation_detector import FieldOrientationDetector
+from nfl_route_tracker.tracking.fixed_field_orientation_detector import FixedFieldOrientationDetector
+from nfl_route_tracker.tracking.final_field_transform import FinalFieldTransform
 from nfl_route_tracker.tracking.trajectory_merger import TrajectoryMerger, merge_trajectory_store
 
 # main class
@@ -87,8 +88,8 @@ class DetectionTracker:
         # Initialize Field Orientation Detector (for perspective correction)
         # This runs ONCE per video on the first frame to correct camera angle
         if self.config.field_orientation_config.enabled:
-            print("Initializing Field Orientation Detector...")
-            self._field_detector = FieldOrientationDetector(
+            print("Initializing FIXED Field Orientation Detector...")
+            self._field_detector = FixedFieldOrientationDetector(
                 video_width=self.config.field_orientation_config.video_width,
                 video_height=self.config.field_orientation_config.video_height,
                 canny_low=self.config.field_orientation_config.canny_low,
@@ -102,6 +103,7 @@ class DetectionTracker:
         else:
             self._field_detector = None
         self._field_orientation = None
+        self._field_transform = None  # FinalFieldTransform instance
 
         # Processing statistics
         self._total_processing_time = 0.0
@@ -110,22 +112,6 @@ class DetectionTracker:
         self._total_detections_filtered = 0
         self._total_tracks_output = 0
         self._total_camera_motion = 0.0
-
-    def _filter_detections(self, detections: List[DetectionResult], frame_height: int = 984) -> List[DetectionResult]:
-        """
-        Filter detections to remove invalid sizes and shapes.
-        """
-        # Apply NFL filter
-        filtered = self._nfl_filter.filter_detections(detections, frame_height)
-
-        # Merge overlapping detections (O-line handling)
-        if self.config.nfl_filter_config.merge_overlaps:
-            filtered = self._nfl_filter.merge_overlapping_detections(filtered, iou_threshold = self.config.nfl_filter_config.merge_iou_threshold)
-
-        # including bounding box stability code
-        filtered = self._nfl_filter.constrain_bbox_area_stability(filtered)
-
-        return filtered
 
     # code to process an individual frame, use later to iterate through all frames
     # REMOVE PRINT STATEMENTS
@@ -214,7 +200,9 @@ class DetectionTracker:
                 if frame_id == 0 and self._field_detector is not None and self.config.field_orientation_config.enabled:
                     print("\nDetecting field orientation from first frame...")
                     self._field_orientation = self._field_detector.detect_and_compute(frame)
-                    print(f"Field orientation detected with confidence: {self._field_orientation.confidence:.2f}")
+                    print(f"  Yard line angle: {self._field_orientation.yard_line_angle:.1f}°")
+                    print(f"  Lines found: {self._field_orientation.all_lines_found}")
+                    print(f"  Confidence: {self._field_orientation.confidence:.2f}")
 
                 # Process frame
                 tracks = self.process_frame(frame, frame_id)
@@ -233,7 +221,6 @@ class DetectionTracker:
                 if self.config.verbose and frame_id % self.config.progress_interval == 0:
                     elapsed = self._total_processing_time
                     fps = self._frames_processed / elapsed if elapsed > 0 else 0
-                    #print(f"Processed frame {frame_id}/{int(total_frames)}")
                     print(f"Frame {frame_id}/{int(total_frames)}, Tracks: {len(tracks)}, Total time: {elapsed:.1f}s")
 
         # Finalize video
@@ -251,6 +238,7 @@ class DetectionTracker:
             print("\nApplying trajectory post-processing to merge fragmented tracks...")
             traj_store = self._trajectory_merger.merge_trajectories(traj_store)
 
+        # camera stability first
         if self._stabilization_enabled and self._camera_stabilizer is not None:
             print("\nApplying camera stabilization to trajectories...")
             traj_store = self._camera_stabilizer.stabilize_trajectory_store(traj_store)
@@ -276,6 +264,22 @@ class DetectionTracker:
             self._save_trajectories_json(traj_store, output_json_path)
 
         return traj_store
+    
+    def _filter_detections(self, detections: List[DetectionResult], frame_height: int = 984) -> List[DetectionResult]:
+        """
+        Filter detections to remove invalid sizes and shapes.
+        """
+        # Apply NFL filter
+        filtered = self._nfl_filter.filter_detections(detections, frame_height)
+
+        # Merge overlapping detections (O-line handling)
+        if self.config.nfl_filter_config.merge_overlaps:
+            filtered = self._nfl_filter.merge_overlapping_detections(filtered, iou_threshold = self.config.nfl_filter_config.merge_iou_threshold)
+
+        # including bounding box stability code
+        filtered = self._nfl_filter.constrain_bbox_area_stability(filtered)
+
+        return filtered
     
     def _filter_short_trajectories(self, store: TrajectoryStore, min_length: int) -> TrajectoryStore:
         """
@@ -304,12 +308,19 @@ class DetectionTracker:
             print("\nSkipping field correction (no field orientation detector)")
             return store
 
-        # Get field orientation data
-        field_homography = self._field_orientation.homography if self._field_orientation else np.eye(3)
-        field_angle = self._field_orientation.field_angle if self._field_orientation else 0.0
+        # Get detected yard line angle
+        yard_line_angle = self._field_orientation.yard_line_angle if self._field_orientation else 0.0
+        print(f"  Detected yard line angle: {yard_line_angle:.1f}°")
 
-        print(f"  Field angle: {field_angle:.1f}°")
+        # Create FinalFieldTransform if not already created
+        if self._field_transform is None:
+            self._field_transform = FinalFieldTransform(
+                yard_line_angle=yard_line_angle,
+                video_width=self.config.field_orientation_config.video_width,
+                video_height=self.config.field_orientation_config.video_height
+            )
 
+        print(f"  Applying FINAL field transformation...")
         corrected_store = TrajectoryStore()
 
         for traj in store.get_all_trajectories():
@@ -317,17 +328,19 @@ class DetectionTracker:
                 # Get center coordinates
                 x, y = det.center[0], det.center[1]
 
-                # Apply field orientation rotation only
-                # Rotate coordinates to make yard lines horizontal
-                x, y = self._field_detector.apply_homography(x, y, field_homography)
+                # Apply FinalFieldTransform
+                # Returns (field_x, field_y) where:
+                # - field_y = depth (same yardline → similar values)
+                # - field_x = width (sideline position)
+                field_x, field_y = self._field_transform.transform_point(x, y)
 
-                # Create corrected detection with new top-left corner
+                # Create corrected detection with new coordinates
                 det_width = det.width
                 det_height = det.height
                 corrected_det = Detection(
                     frame_id=det.frame_id,
-                    x=x - det_width / 2,
-                    y=y - det_height / 2,
+                    x=field_x - det_width / 2,
+                    y=field_y - det_height / 2,
                     width=det_width,
                     height=det_height,
                     confidence=det.confidence
@@ -510,6 +523,8 @@ class DetectionTracker:
         if self._field_detector is not None:
             self._field_detector.reset()
         self._field_orientation = None
+        self._field_transform = None
+        # Reset NFL filter's area history tracking
         self._nfl_filter.reset_area_history()
         self._total_processing_time = 0.0
         self._frames_processed = 0
