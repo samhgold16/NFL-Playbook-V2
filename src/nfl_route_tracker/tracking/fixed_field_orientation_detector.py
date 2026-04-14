@@ -154,7 +154,7 @@ class FixedFieldOrientationDetector:
         self._cached_homography = homography
         self._cached_orientation = orientation
 
-        print(f"\n  Field Orientation (FIXED):")
+        print(f"\n  Field Orientation:")
         print(f"    Detected yard line angle: {yard_line_angle:.1f}°")
         print(f"    Rotation to apply: {rotation_angle:.1f}°")
         print(f"    Lines found: {len(lines)}")
@@ -180,7 +180,7 @@ class FixedFieldOrientationDetector:
 
             # Skip very short lines
             length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-            if length < 30:
+            if length < 850:
                 continue
 
             # Compute angle using atan2

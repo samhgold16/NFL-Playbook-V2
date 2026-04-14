@@ -38,8 +38,8 @@ from .tracking import (
     DetectionTrackerConfig,
 
     # Field orientation (perspective correction)
-    FieldOrientationDetector,
-    FieldOrientation,
+    #FieldOrientationDetector,
+    #FieldOrientation,
     FieldOrientationConfig,
 
     # Trajectory processing
@@ -80,8 +80,8 @@ __all__ = [
     'DetectionTrackerConfig',
 
     # Field orientation (perspective correction)
-    'FieldOrientationDetector',
-    'FieldOrientation',
+    #'FieldOrientationDetector',
+    #'FieldOrientation',
     'FieldOrientationConfig',
 
     # Trajectory processing

@@ -9,7 +9,7 @@ from .trajectory import Detection, Trajectory, TrajectoryStore
 from .detection_tracker import DetectionTracker
 from .bytetrack_tracker import ByteTrackTracker, Track
 from .trajectory_merger import TrajectoryMerger, merge_trajectory_store
-from .field_orientation_detector import FieldOrientationDetector, FieldOrientation
+#from .field_orientation_detector import FieldOrientationDetector, FieldOrientation
 from .fixed_field_orientation_detector import FixedFieldOrientationDetector, FixedFieldOrientation
 from .final_field_transform import FinalFieldTransform, create_final_transform
 
@@ -33,8 +33,8 @@ __all__ = [
     'DetectionTracker',
 
     # Stabilization/Orientation
-    'FieldOrientationDetector',
-    'FieldOrientation',
+    #'FieldOrientationDetector',
+    #'FieldOrientation',
     'FixedFieldOrientationDetector',
     'FixedFieldOrientation',
     'FinalFieldTransform',

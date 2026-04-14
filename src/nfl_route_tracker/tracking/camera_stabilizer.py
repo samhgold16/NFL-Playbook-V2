@@ -49,7 +49,8 @@ class CameraStabilizer:
 
         # Per-frame homography H_{t-1 -> t} and its smoothing history
         self._frame_homography: Optional[np.ndarray] = None
-        self._homography_history: List[Tuple[float, float, float]] = []
+        #self._homography_history: List[Tuple[float, float, float]] = []
+        self._homography_history: List[Tuple[float, float, float, float]] = []
 
         # Initialised to identity; composed on each update() call.
         self._cumulative_H: np.ndarray = np.eye(3, dtype=np.float64)
@@ -314,75 +315,200 @@ class CameraStabilizer:
 
         return good_prev, good_curr, status
 
-    def _estimate_homography(self, prev_pts: np.ndarray,
-                            curr_pts: np.ndarray) -> Optional[np.ndarray]:
+    # def _estimate_homography(self, prev_pts: np.ndarray,
+    #                         curr_pts: np.ndarray) -> Optional[np.ndarray]:
+    #     """
+    #     Estimate homography between two sets of matched points.
+    #     """
+    #     if len(prev_pts) < 4:
+    #         return None
+
+    #     H, mask = cv2.findHomography(prev_pts.reshape(-1, 1, 2).astype(np.float32),
+    #                                 curr_pts.reshape(-1, 1, 2).astype(np.float32),
+    #                                 cv2.RANSAC,
+    #                                 ransacReprojThreshold = self.config.ransac_threshold,
+    #                                 maxIters = 2000,
+    #                                 confidence = 0.995,)
+
+    #     if H is None:
+    #         return None
+
+    #     # Reject if fewer than 30 % of matches are inliers
+    #     if mask is not None and np.sum(mask) / len(mask) < 0.3:
+    #         return None
+
+    #     return H
+
+    def _estimate_homography(
+        self,
+        prev_pts: np.ndarray,
+        curr_pts: np.ndarray
+    ) -> Optional[np.ndarray]:
         """
-        Estimate homography between two sets of matched points.
+        Robust homography estimation with zoom-awareness and outlier rejection.
         """
-        if len(prev_pts) < 4:
+
+        if len(prev_pts) < 6:
             return None
 
-        H, mask = cv2.findHomography(prev_pts.reshape(-1, 1, 2).astype(np.float32),
-                                    curr_pts.reshape(-1, 1, 2).astype(np.float32),
-                                    cv2.RANSAC,
-                                    ransacReprojThreshold = self.config.ransac_threshold,
-                                    maxIters = 2000,
-                                    confidence = 0.995,)
+        prev = prev_pts.reshape(-1, 1, 2).astype(np.float32)
+        curr = curr_pts.reshape(-1, 1, 2).astype(np.float32)
 
-        if H is None:
+        # Estimate homography with RANSAC
+        H, mask = cv2.findHomography(
+            prev,
+            curr,
+            method=cv2.RANSAC,
+            ransacReprojThreshold=self.config.ransac_threshold,
+            maxIters=3000,
+            confidence=0.999
+        )
+
+        if H is None or mask is None:
             return None
 
-        # Reject if fewer than 30 % of matches are inliers
-        if mask is not None and np.sum(mask) / len(mask) < 0.3:
+        inlier_ratio = float(np.sum(mask)) / len(mask)
+
+        # 🔒 Reject weak solutions
+        if inlier_ratio < 0.4:
+            return None
+
+        # -------------------------------
+        # 🔍 Decompose transform
+        # -------------------------------
+        dx = H[0, 2]
+        dy = H[1, 2]
+
+        # Extract scale (robust to rotation)
+        scale_x = np.sqrt(H[0, 0]**2 + H[1, 0]**2)
+        scale_y = np.sqrt(H[0, 1]**2 + H[1, 1]**2)
+        scale = (scale_x + scale_y) / 2.0
+
+        # Extract rotation
+        rotation = np.arctan2(H[1, 0], H[0, 0])
+
+        # -------------------------------
+        # 🚨 Sanity checks (CRITICAL)
+        # -------------------------------
+
+        # Reject crazy zoom jumps
+        if not (0.90 < scale < 1.10):
+            return None
+
+        # Reject extreme translations (bad matches)
+        if np.sqrt(dx**2 + dy**2) > 100:
+            return None
+
+        # Reject NaNs / inf
+        if not np.isfinite(H).all():
             return None
 
         return H
 
+    # def _smooth_transform(self, H: np.ndarray) -> np.ndarray:
+    #     """
+    #     Smooth the per-frame homography using a moving-average window.
+    #     """
+    #     dx = H[0, 2]
+    #     dy = H[1, 2]
+
+    #     # Extract rotation angle from the rotation matrix portion
+    #     # Using atan2(H[1,0], H[0,0]) gives the rotation angle
+    #     # This works because the matrix is [[cos θ, -sin θ], [sin θ, cos θ]] scaled
+    #     da = np.arctan2(H[1, 0], H[0, 0])
+
+    #     # Ignore sub-pixel jitter
+    #     if np.sqrt(dx**2 + dy**2) < self.config.motion_threshold:
+    #         return np.eye(3, dtype=np.float64)
+
+    #     # Store for smoothing
+    #     self._homography_history.append((dx, dy, da))
+
+    #     # Maintain rolling window
+    #     if len(self._homography_history) > self.config.smoothing_window:
+    #         self._homography_history.pop(0)
+
+    #     # Compute smoothed values
+    #     avg_dx = float(np.mean([h[0] for h in self._homography_history]))
+    #     avg_dy = float(np.mean([h[1] for h in self._homography_history]))
+    #     avg_da = float(np.mean([h[2] for h in self._homography_history]))
+
+    #     # Reconstruct rotation matrix from smoothed angle
+    #     cos_a, sin_a = np.cos(avg_da), np.sin(avg_da)
+
+    #     return np.array([[cos_a, -sin_a, avg_dx],
+    #                      [sin_a,  cos_a, avg_dy],
+    #                      [0.0,    0.0,   1.0]], dtype = np.float64)
+    
     def _smooth_transform(self, H: np.ndarray) -> np.ndarray:
         """
-        Smooth the per-frame homography using a moving-average window.
+        Smooth homography including translation, rotation, and scale.
 
-        This extracts translation and rotation separately for more stable smoothing.
-        The homography matrix H contains:
-        - H[0,2], H[1,2]: translation (dx, dy)
-        - H[0,0], H[0,1], H[1,0], H[1,1]: rotation + scale + shear
-
-        For camera panning (pure translation + small rotation), we extract:
-        - dx, dy: translation components
-        - da: rotation angle using atan2 on rotation matrix elements
-
-        Note: Using arctan2 on H[1,0] and H[0,0] is correct for extracting
-        rotation from a rotation+scaled matrix because:
-        R = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]] * scale
-        So arctan2(R[1,0], R[0,0]) = arctan2(sin(θ)*scale, cos(θ)*scale) = θ
+        Uses log-scale averaging for stable zoom smoothing.
         """
-        dx = H[0, 2]
-        dy = H[1, 2]
 
-        # Extract rotation angle from the rotation matrix portion
-        # Using atan2(H[1,0], H[0,0]) gives the rotation angle
-        # This works because the matrix is [[cos θ, -sin θ], [sin θ, cos θ]] scaled
-        da = np.arctan2(H[1, 0], H[0, 0])
+        # -------------------------------
+        # 🔍 Decompose transform
+        # -------------------------------
+        dx = float(H[0, 2])
+        dy = float(H[1, 2])
 
-        # Ignore sub-pixel jitter
-        if np.sqrt(dx**2 + dy**2) < self.config.motion_threshold:
+        # Rotation
+        da = float(np.arctan2(H[1, 0], H[0, 0]))
+
+        # Scale (average of x/y)
+        scale_x = np.sqrt(H[0, 0]**2 + H[1, 0]**2)
+        scale_y = np.sqrt(H[0, 1]**2 + H[1, 1]**2)
+        scale = float((scale_x + scale_y) / 2.0)
+
+        # -------------------------------
+        # 🚫 Ignore tiny motion
+        # -------------------------------
+        if (
+            np.sqrt(dx**2 + dy**2) < self.config.motion_threshold
+            and abs(scale - 1.0) < 0.002
+            and abs(da) < 0.002
+        ):
             return np.eye(3, dtype=np.float64)
 
-        # Store for smoothing
-        self._homography_history.append((dx, dy, da))
+        # -------------------------------
+        # 📦 Store history
+        # -------------------------------
+        self._homography_history.append((dx, dy, da, np.log(scale)))
 
-        # Maintain rolling window
         if len(self._homography_history) > self.config.smoothing_window:
             self._homography_history.pop(0)
 
-        # Compute smoothed values
-        avg_dx = float(np.mean([h[0] for h in self._homography_history]))
-        avg_dy = float(np.mean([h[1] for h in self._homography_history]))
-        avg_da = float(np.mean([h[2] for h in self._homography_history]))
+        # -------------------------------
+        # 📊 Compute smoothed values
+        # -------------------------------
+        dxs = [h[0] for h in self._homography_history]
+        dys = [h[1] for h in self._homography_history]
+        das = [h[2] for h in self._homography_history]
+        log_scales = [h[3] for h in self._homography_history]
 
-        # Reconstruct rotation matrix from smoothed angle
-        cos_a, sin_a = np.cos(avg_da), np.sin(avg_da)
+        avg_dx = float(np.mean(dxs))
+        avg_dy = float(np.mean(dys))
 
-        return np.array([[cos_a, -sin_a, avg_dx],
-                         [sin_a,  cos_a, avg_dy],
-                         [0.0,    0.0,   1.0]], dtype = np.float64)
+        # Circular mean for angles
+        avg_da = float(np.arctan2(
+            np.mean(np.sin(das)),
+            np.mean(np.cos(das))
+        ))
+
+        # Log-scale averaging (CRITICAL for zoom stability)
+        avg_scale = float(np.exp(np.mean(log_scales)))
+
+        # -------------------------------
+        # 🧱 Reconstruct matrix
+        # -------------------------------
+        cos_a = np.cos(avg_da)
+        sin_a = np.sin(avg_da)
+
+        H_smooth = np.array([
+            [avg_scale * cos_a, -avg_scale * sin_a, avg_dx],
+            [avg_scale * sin_a,  avg_scale * cos_a, avg_dy],
+            [0.0,               0.0,               1.0]
+        ], dtype=np.float64)
+
+        return H_smooth
