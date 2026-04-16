@@ -263,17 +263,16 @@ NFL_FIELD = NFLFieldConstants()
 # setting up overall pipeline config with all defaults, can be overridden by user when initializing pipeline
 def get_pipeline_config() -> DetectionTrackerConfig:
 
-    return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'yolov8m.pt',
+    return DetectionTrackerConfig(detector_config = DetectorConfig(model_name = 'best_m.pt', # best_m.pt, best_l yolov8m, yolov8l
                                                                    confidence_threshold = 0.10,
                                                                    imgsz = 1280), # 1280
-                                  tracker_config = TrackerConfig(track_high_thresh = 0.45, track_low_thresh = 0.05,
-                                                                new_track_thresh = 0.1, track_buffer = 90,
-                                                                match_thresh = 0.65,
+                                  tracker_config = TrackerConfig(track_high_thresh = 0.6, track_low_thresh = 0.15,
+                                                                new_track_thresh = 0.2, track_buffer = 60,
+                                                                match_thresh = 0.75,
                                                                 gmc_method = None,  # CameraStabilizer handles motion
                                                                 gmc_downscale = 2.0, min_trajectory_length = 30,
                                                                 max_trajectory_gap = 50, confidence_threshold = 0.05,
-                                                                filter_ghost_boxes = False, fuse_score = True,
-                                                                iou_threshold = 0.35,
+                                                                fuse_score = True, iou_threshold = 0.35,
                                                                 enable_trajectory_merging = True,
                                                                 merger_spatial_threshold = 150.0,
                                                                 merger_temporal_threshold = 45,

@@ -101,7 +101,7 @@ def create_dataset_yaml(output_dir: Path, num_train: int, num_val: int):
 # Training frames: {num_train}, Validation frames: {num_val}
 
 # Dataset root path (absolute path recommended)
-path: {output_dir.absolute()}
+path: /content/drive/MyDrive/NFL_Route_Tracker/yolo_dataset
 
 # Training and validation image directories
 train: images/train

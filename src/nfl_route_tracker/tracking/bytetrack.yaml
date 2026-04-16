@@ -7,13 +7,13 @@
                     tracker_type: bytetrack
 
                     # Detection confidence thresholds
-                    track_high_thresh: 0.45
-                    track_low_thresh: 0.05
-                    new_track_thresh: 0.1
+                    track_high_thresh: 0.6
+                    track_low_thresh: 0.15
+                    new_track_thresh: 0.2
 
                     # Occlusion handling
-                    track_buffer: 90
-                    match_thresh: 0.65
+                    track_buffer: 60
+                    match_thresh: 0.75
                     fuse_score: True
 
                     # Global Motion Compensation (camera stabilization)

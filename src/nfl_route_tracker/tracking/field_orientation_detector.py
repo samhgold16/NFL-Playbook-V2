@@ -133,7 +133,8 @@ class FixedFieldOrientationDetector:
         # Compute rotation needed to make yard lines vertical
         # We WANT yard lines to be vertical in the output
         # If detected angle is 75°, we need to rotate by -75° to make them vertical
-        rotation_angle = -yard_line_angle
+        #rotation_angle = 90-yard_line_angle
+        rotation_angle = yard_line_angle
 
         # Build homography for rotation
         homography = self._compute_rotation_homography(rotation_angle)
@@ -180,6 +181,7 @@ class FixedFieldOrientationDetector:
 
             # Skip very short lines
             length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+            # WHAT VALUES????
             if length < 850:
                 continue
 
