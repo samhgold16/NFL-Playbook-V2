@@ -10,6 +10,10 @@
 
 ![test1_tracked-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/787da9a5-ceaf-4a63-b80a-ac6d4d74b437)
 
+*Version 3 - Self-Supervised YOLO + ByteTrack*
+
+<img width="800" height="411" alt="test70_tracked-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/85858592-baf0-4e2e-858d-5fbfa1e39fcc" />
+
 ## Installation Steps
 
 *INPUT HERE*
