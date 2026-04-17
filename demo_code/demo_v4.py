@@ -192,7 +192,7 @@ def main():
     parser.add_argument('--output', type=str, default=None, help='Output directory (default: data/viz_output/)')
     parser.add_argument('--max-frames', type=int, default=None, help='Limit frames per video (for quick testing)')
     parser.add_argument('--batch', action='store_true', help='Process all videos in data/video_test/')
-    parser.add_argument('--flip-y', action='store_true',
+    parser.add_argument('--f', action='store_true',
                        help='Flip Y coordinates to normalize play direction (use when offense moves right-to-left)')
 
     args = parser.parse_args()
@@ -215,7 +215,7 @@ def main():
     # Determine what to process
     if args.batch:
         print_header("Batch Processing Mode")
-        success_count = batch_process(video_test_dir, output_dir, config, flip_y=args.flip_y)
+        success_count = batch_process(video_test_dir, output_dir, config, flip_y=args.f)
     elif args.video:
         # Use specified video
         video_path = Path(args.video)
@@ -227,12 +227,12 @@ def main():
             sys.exit(1)
 
         print_header("Single Video Mode")
-        if args.flip_y:
+        if args.f:
             print("X coordinates will be flipped to normalize play direction.")
 
         video_output_dir = output_dir / video_path.stem
         video_output_dir.mkdir(parents=True, exist_ok=True)
-        success = process_video(video_path, video_output_dir, config, args.max_frames, flip_y=args.flip_y)
+        success = process_video(video_path, video_output_dir, config, args.max_frames, flip_y=args.f)
 
         if success:
             print("\nDone!")
@@ -258,13 +258,13 @@ def main():
         print_header("Single Video Mode (auto-selected)")
         print(f"Using: {video_path.name}")
         print(f"Output directory: {output_dir}")
-        if args.flip_y:
+        if args.f:
             print("X coordinates will be flipped to normalize play direction.")
         print()
 
         video_output_dir = output_dir / video_path.stem
         video_output_dir.mkdir(parents=True, exist_ok=True)
-        success = process_video(video_path, video_output_dir, config, args.max_frames, flip_y=args.flip_y)
+        success = process_video(video_path, video_output_dir, config, args.max_frames, flip_y=args.f)
 
         if success:
             print("\nDone!")

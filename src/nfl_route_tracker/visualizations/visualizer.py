@@ -93,8 +93,7 @@ class TrajectoryVisualizer:
             # Formatting with CORRECT coordinate semantics
             ax.set_xlabel('X Position (field length, toward endzone)', fontsize = 12)
             ax.set_ylabel('Y Position (field width, sideline to sideline)', fontsize = 12)
-            ax.set_title(f"{title}\n(X = up/down field, Y = sideline to sideline)\n"
-                        f"[Y-axis {'INVERTED: top=video TOP, bottom=video BOTTOM' if invert_y_axis else 'NOT inverted: standard matplotlib'}]",
+            ax.set_title(f"{title}\n(X = up/down field, Y = sideline to sideline)",
                         fontsize = 11, fontweight = 'bold')
 
             # Video coordinates: Y=0 at TOP, Y increases going DOWN

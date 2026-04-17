@@ -39,12 +39,7 @@ class FinalFieldTransform:
         video_height: Height of the video frame
     """
 
-    def __init__(
-        self,
-        yard_line_angle: float,
-        video_width: float,
-        video_height: float
-    ):
+    def __init__(self, yard_line_angle: float, video_width: float, video_height: float):
         self.yard_line_angle = yard_line_angle
         self.video_width = video_width
         self.video_height = video_height

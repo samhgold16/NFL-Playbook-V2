@@ -346,7 +346,10 @@ class DetectionTracker:
             return store
 
         # Get detected yard line angle
-        yard_line_angle = self._field_orientation.yard_line_angle if self._field_orientation else 0.0
+        # HERE DEBUGGING DEBUGGIN DEBUGGING
+        homography = self._field_orientation.homography
+        yard_line_angle = self._field_orientation.yard_line_angle
+        #yard_line_angle = self._field_orientation.yard_line_angle if self._field_orientation else 0.0
         print(f"  Detected yard line angle: {yard_line_angle:.1f}°")
 
         # Create FinalFieldTransform if not already created
@@ -369,7 +372,10 @@ class DetectionTracker:
                 # Returns (field_x, field_y) where:
                 # - field_y = depth (same yardline → similar values)
                 # - field_x = width (sideline position)
-                field_x, field_y = self._field_transform.transform_point(x, y)
+
+                # HERE HERE HERE HERE 
+                #field_x, field_y = self._field_transform.transform_point(x, y)
+                field_x, field_y = self._apply_transform(x, y, homography) 
 
                 # Create corrected detection with new coordinates
                 det_width = det.width

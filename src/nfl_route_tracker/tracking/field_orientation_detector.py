@@ -187,7 +187,7 @@ class FixedFieldOrientationDetector:
             # Skip very short lines
             length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
             # WHAT VALUES????
-            if length < 850:
+            if length < 450:
                 continue
 
             # Compute angle using atan2
@@ -284,14 +284,12 @@ class FixedFieldOrientationDetector:
         if not (0 < angle < 90):
             return (False, f"Angle {angle}° is outside valid range (0-90°)")
 
-        if angle > 45:
+        if angle > 40:
             return (False, f"Angle {angle}° is too close to vertical")
 
         # Valid range is 45-85° (with preference for 65-85°)
-        if 0 <= angle <= 25:
-            return (True, f"Angle {angle}° is in ideal range for All-22 yard lines")
-        elif 25 <= angle < 45:
-            return (True, f"Angle {angle}° is acceptable (though 65-85° is more common)")
+        if 0 <= angle <= 40:
+            return (True, f"Angle {angle}° is okay")
         else:
             return (False, f"Angle {angle}° is suspicious")
 
