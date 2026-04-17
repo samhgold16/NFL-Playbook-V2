@@ -1,20 +1,9 @@
 """
 NFL Route Tracker - FIXED Field Orientation Detector
 =================================================
-
-CRITICAL FIX: The old detector was looking for nearly-HORIZONTAL lines,
-but in All-22 footage, yard lines are actually NEARLY VERTICAL (~75-80°).
-
-This fixed version:
 1. Detects the ACTUAL slanted yard lines (diagonal, not horizontal)
 2. Computes the correct angle for transformation
 3. Properly corrects for camera perspective
-
-KEY INSIGHT FROM VIDEO ANALYSIS:
-- Yard lines in All-22 footage slant from top-left to bottom-right
-- They appear at approximately 75-80° from horizontal
-- The old code was finding WRONG lines (probably hash marks)
-- This is why the transformation wasn't working
 """
 
 import numpy as np
@@ -43,10 +32,6 @@ class FixedFieldOrientation:
 class FixedFieldOrientationDetector:
     """
     FIXED detector that properly identifies slanted yard lines in All-22 footage.
-
-    CRITICAL DIFFERENCE from old version:
-    - Old: Looked for nearly-horizontal lines (0°)
-    - New: Detects diagonal lines at their ACTUAL angle (~75-80°)
     """
 
     def __init__(
@@ -125,10 +110,30 @@ class FixedFieldOrientationDetector:
 
         print(f"  Angle distribution: {dict(sorted(angle_histogram.items()))}")
 
+        # Check if endzone might be causing issues
+        has_endzone = self._detect_endzone_presence(first_frame)
+        if has_endzone:
+            print("  Note: Endzone detected in frame - may affect line detection")
+
         # Find the dominant angle cluster (yard lines)
         yard_line_angle = self._find_dominant_angle(all_angles)
 
         print(f"  Dominant yard line angle: {yard_line_angle:.1f}°")
+
+        # Validate the detected angle
+        is_valid, validation_reason = self._is_valid_yard_line_angle(yard_line_angle)
+
+        if not is_valid:
+            print(f" WARNING: Detected angle may be incorrect!")
+            print(f"     {validation_reason}")
+
+            # If angle is exactly 0° or completely outside expected range,
+            # skip the transformation entirely to avoid making things worse
+            if yard_line_angle == 0 or yard_line_angle >= 40:
+                print(f" SKIPPING field rotation transformation!")
+                return self._create_default_orientation()
+        else:
+            print(f"  ✓ {validation_reason}")
 
         # Compute rotation needed to make yard lines vertical
         # We WANT yard lines to be vertical in the output
@@ -208,13 +213,6 @@ class FixedFieldOrientationDetector:
     def _find_dominant_angle(self, angles: List[float]) -> float:
         """
         Find the dominant angle cluster using histogram analysis.
-
-        Yard lines will form a cluster around a specific angle.
-        We find this by looking at the histogram peaks.
-
-        CRITICAL: In All-22 footage, yard lines should be in 65-90° range.
-        We prioritize this range over horizontal lines (0°) because
-        the sideline camera creates the characteristic diagonal yard lines.
         """
         if not angles:
             return 0.0
@@ -253,23 +251,91 @@ class FixedFieldOrientationDetector:
                 max_count = count
                 dominant_angle = bin_angle
 
-        # DECISION LOGIC:
-        # If there are enough lines in the yard line range (>= 5 lines or >= 30% of dominant),
-        # and the yard line angle is at least 5 lines, use the yard line angle
-        # This prioritizes the slanted yard lines characteristic of All-22 footage
 
-        if yard_line_range_count >= 5 and best_yard_line_count >= 5:
-            # Use weighted average of yard line range angles for better precision
-            if yard_line_range_count > 0:
-                weighted_sum = sum(bin_angle * count for bin_angle, count in yard_line_range_angles)
-                return weighted_sum / yard_line_range_count
-            return best_yard_line_angle
-        elif dominant_angle == 0 and yard_line_range_count >= 3:
-            # Fallback: if 0° is dominant but we have yard line evidence, use yard line angle
-            weighted_sum = sum(bin_angle * count for bin_angle, count in yard_line_range_angles)
-            return weighted_sum / yard_line_range_count
+        total_lines = sum(bins.values())
 
+        # If we have ANY yard line range evidence (even just 2-3 lines),
+        # and dominant is 0°, we should still consider the yard line angle
+        if dominant_angle == 0 and yard_line_range_count > 0:
+            # Use the best yard line angle if we have any evidence
+            if best_yard_line_count >= 2:  # Lower threshold to 2 lines
+                if len(yard_line_range_angles) > 1:
+                    weighted_sum = sum(bin_angle * count for bin_angle, count in yard_line_range_angles)
+                    return weighted_sum / yard_line_range_count
+                return best_yard_line_angle
+
+        # If dominant is in yard line range, use it
+        if 65 <= dominant_angle <= 90 and dominant_angle != 0:
+            return dominant_angle
+
+        # If dominant is 0° and no yard line evidence, return 0°
         return dominant_angle
+
+    def _is_valid_yard_line_angle(self, angle: float) -> Tuple[bool, str]:
+        """
+        Check if the detected angle is reasonable for All-22 footage.
+
+        Returns:
+            (is_valid, reason)
+        """
+        if angle == 0:
+            return (False, "Angle is exactly 0° - likely detection of horizontal lines, not yard lines")
+
+        if not (0 < angle < 90):
+            return (False, f"Angle {angle}° is outside valid range (0-90°)")
+
+        if angle > 45:
+            return (False, f"Angle {angle}° is too close to vertical")
+
+        # Valid range is 45-85° (with preference for 65-85°)
+        if 0 <= angle <= 25:
+            return (True, f"Angle {angle}° is in ideal range for All-22 yard lines")
+        elif 25 <= angle < 45:
+            return (True, f"Angle {angle}° is acceptable (though 65-85° is more common)")
+        else:
+            return (False, f"Angle {angle}° is suspicious")
+
+    def _detect_endzone_presence(self, frame: np.ndarray) -> bool:
+        """
+        Detect if an endzone is visible in the frame.
+        """
+        h, w = frame.shape[:2]
+
+        # Check the top portion of frame for bright white regions
+        top_region = frame[:int(h * 0.2), :, :]
+
+        if len(frame.shape) == 3:
+            gray = cv2.cvtColor(top_region, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = top_region
+
+        # Calculate percentage of bright pixels
+        _, bright_mask = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+        bright_ratio = np.sum(bright_mask > 0) / bright_mask.size
+
+        # If more than 30% of top region is bright white, likely endzone
+        if bright_ratio > 0.30:
+            return True
+
+        # Check for rectangular patterns (endzone lines)
+        edges = cv2.Canny(gray, 50, 150)
+        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50,
+                              minLineLength=100, maxLineGap=20)
+
+        if lines is not None:
+            # Count horizontal lines in top region
+            horizontal_count = 0
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                angle = np.abs(np.degrees(np.arctan2(y2-y1, x2-x1)))
+                if angle < 10:  # Nearly horizontal
+                    horizontal_count += 1
+
+            # If many horizontal lines in top, likely endzone
+            if horizontal_count > 5:
+                return True
+
+        return False
 
     def _compute_rotation_homography(self, rotation_angle: float) -> np.ndarray:
         """
@@ -347,22 +413,175 @@ class FixedFieldOrientationDetector:
         self._last_frame = None
         self._all_detected_lines = []
 
+    def validate_orientation(self, first_frame: np.ndarray) -> Dict[str, any]:
+        """
+        Validate that the detected field orientation is correct.
+        """
+        # Use _cached_orientation (which is set after detect_and_compute)
+        if self._cached_orientation is None:
+            return {
+                'is_valid': False,
+                'message': 'No orientation detected yet. Run detect_and_compute() first.',
+                'y_spread_same_yardline': -1,
+                'y_spread_diff_depths': -1,
+                'avg_line_angle': -1,
+                'angle_deviation': -1,
+                'lines_analyzed': 0
+            }
+
+        # Get the homography that was computed
+        homography = self._cached_homography
+        if homography is None:
+            return {
+                'is_valid': False,
+                'message': 'No homography available. Run detect_and_compute() first.',
+                'y_spread_same_yardline': -1,
+                'y_spread_diff_depths': -1,
+                'avg_line_angle': -1,
+                'angle_deviation': -1,
+                'lines_analyzed': 0
+            }
+
+        # Convert to grayscale
+        if len(first_frame.shape) == 3:
+            gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = first_frame
+
+        edges = cv2.Canny(gray, self.canny_low, self.canny_high)
+
+        lines = cv2.HoughLinesP(
+            edges,
+            rho=1,
+            theta=np.pi / 180,
+            threshold=self.hough_threshold,
+            minLineLength=self.hough_min_line_length,
+            maxLineGap=self.hough_max_line_gap
+        )
+
+        if lines is None or len(lines) < 2:
+            return {
+                'is_valid': False,
+                'message': 'Not enough lines detected for validation',
+                'y_spread_same_yardline': -1,
+                'y_spread_diff_depths': -1,
+                'avg_line_angle': -1,
+                'angle_deviation': -1,
+                'lines_analyzed': 0
+            }
+
+        # Apply detected homography to all line endpoints
+        transformed_lines = []
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            # Compute line length to filter short lines
+            length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+            if length < 50:  # Skip very short lines
+                continue
+
+            # Apply transformation
+            def apply_transform(x, y):
+                point = np.array([x, y, 1.0])
+                transformed = homography @ point
+                if abs(transformed[2]) > 1e-6:
+                    return (float(transformed[0] / transformed[2]),
+                            float(transformed[1] / transformed[2]))
+                return (float(transformed[0]), float(transformed[1]))
+
+            t_x1, t_y1 = apply_transform(x1, y1)
+            t_x2, t_y2 = apply_transform(x2, y2)
+            transformed_lines.append(((t_x1, t_y1), (t_x2, t_y2)))
+
+        # Check 1: After rotation, lines should be nearly vertical (around 90°)
+        angles_after_rotation = []
+        for (x1, y1), (x2, y2) in transformed_lines:
+            length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+            if length > 50:  # Skip short lines
+                angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+                # Normalize to 0-90
+                while angle < 0:
+                    angle += 180
+                while angle >= 180:
+                    angle -= 180
+                if angle >= 90:
+                    angle = 180 - angle
+                angles_after_rotation.append(angle)
+
+        # Lines should be nearly vertical (around 90°)
+        avg_angle = np.mean(angles_after_rotation) if angles_after_rotation else 0
+        angle_deviation = abs(90 - avg_angle)
+
+        # Check 2: Create synthetic test points on "same yardline" and verify Y consistency
+        w, h = self.video_width, self.video_height
+        yard_line_angle = self._cached_orientation.yard_line_angle
+
+        # Apply same transform function
+        def apply_transform(x, y):
+            point = np.array([x, y, 1.0])
+            transformed = homography @ point
+            if abs(transformed[2]) > 1e-6:
+                return (float(transformed[0] / transformed[2]),
+                        float(transformed[1] / transformed[2]))
+            return (float(transformed[0]), float(transformed[1]))
+
+        # Create points collinear at the detected yard line angle
+        m = np.tan(np.radians(yard_line_angle))
+        b = h * 0.6  # Position in lower portion of frame
+
+        test_points_same_yardline = [
+            (w * 0.3, m * w * 0.3 + b),
+            (w * 0.5, m * w * 0.5 + b),
+            (w * 0.7, m * w * 0.7 + b),
+        ]
+
+        transformed_ys = []
+        for x, y in test_points_same_yardline:
+            t_x, t_y = apply_transform(x, y)
+            transformed_ys.append(t_y)
+
+        y_spread_same = max(transformed_ys) - min(transformed_ys) if len(transformed_ys) >= 2 else float('inf')
+
+        # Check 3: Points at different depths should have different Y values
+        test_points_diff_depth = [
+            (w * 0.5, h * 0.3),  # Top (far)
+            (w * 0.5, h * 0.5),  # Middle
+            (w * 0.5, h * 0.7),  # Bottom (near)
+        ]
+
+        transformed_ys_diff = []
+        for x, y in test_points_diff_depth:
+            t_x, t_y = apply_transform(x, y)
+            transformed_ys_diff.append(t_y)
+
+        y_spread_diff = max(transformed_ys_diff) - min(transformed_ys_diff) if len(transformed_ys_diff) >= 2 else 0
+
+        # Validation criteria:
+        # 1. After rotation, average line angle should be close to 90° (vertical)
+        # 2. Y spread for "same yardline" points should be small (< 50px)
+        # 3. Y spread for "different depths" should be large (> 100px)
+
+        is_valid = (
+            angle_deviation < 20 and  # Lines should be near-vertical
+            y_spread_same < 50 and     # Same yardline → similar Y
+            y_spread_diff > 100        # Different depths → different Y
+        )
+
+        message = f"Orientation {'VALID' if is_valid else 'INVALID'}. "
+        message += f"Avg line angle: {avg_angle:.1f}° (deviation from vertical: {angle_deviation:.1f}°). "
+        message += f"Y spread same-yardline: {y_spread_same:.1f}px. "
+        message += f"Y spread diff-depths: {y_spread_diff:.1f}px."
+
+        return {
+            'is_valid': is_valid,
+            'message': message,
+            'avg_line_angle': avg_angle,
+            'angle_deviation': angle_deviation,
+            'y_spread_same_yardline': y_spread_same,
+            'y_spread_diff_depths': y_spread_diff,
+            'lines_analyzed': len(transformed_lines)
+        }
+
 
 def create_fixed_detector(**kwargs) -> FixedFieldOrientationDetector:
     """Factory function for fixed detector."""
     return FixedFieldOrientationDetector(**kwargs)
-
-
-def test_fixed_detector():
-    """Test the fixed detector."""
-    print("="*70)
-    print("TESTING FIXED FIELD ORIENTATION DETECTOR")
-    print("="*70)
-    print()
-    print("KEY FIX: Now detecting ACTUAL slanted yard lines (~75-80°) instead of")
-    print("         only looking for nearly-horizontal lines (~0°)")
-    print()
-
-
-if __name__ == "__main__":
-    test_fixed_detector()

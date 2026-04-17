@@ -61,7 +61,8 @@ def print_config_summary(config: DetectionTrackerConfig) -> None:
 
 def process_video(video_path: Path, output_dir: Path,
                   config: DetectionTrackerConfig,  max_frames: Optional[int] = None,
-                  filter_trajectories: bool = True) -> bool:
+                  filter_trajectories: bool = True,
+                  flip_y: bool = False) -> bool:
     """
     Process a single video file with ByteTrack.
     """
@@ -84,7 +85,8 @@ def process_video(video_path: Path, output_dir: Path,
             output_video_path=str(output_video),
             output_json_path=str(output_json),
             max_frames=max_frames,
-            filter_short_trajectories=filter_trajectories
+            filter_short_trajectories=filter_trajectories,
+            flip_y=flip_y
         )
 
         # Print results
@@ -105,7 +107,8 @@ def process_video(video_path: Path, output_dir: Path,
         if store.num_trajectories > 0:
             print("\nGenerating trajectory plot...")
             viz = TrajectoryVisualizer(figsize=(14, 8))
-            viz.plot_trajectories(store, output_path=str(output_plot), title=f"Tracked Trajectories - {video_path.stem}")
+            viz.plot_trajectories(store, output_path=str(output_plot), title=f"Tracked Trajectories - {video_path.stem}",
+                                 invert_y_axis=True)
 
         # List outputs
         print("\n" + "-" * 50)
@@ -126,7 +129,7 @@ def process_video(video_path: Path, output_dir: Path,
         traceback.print_exc()
         return False
     
-def batch_process(video_dir: Path, output_dir: Path, config: DetectionTrackerConfig) -> int:
+def batch_process(video_dir: Path, output_dir: Path, config: DetectionTrackerConfig, flip_y: bool = False) -> int:
     """
     Process multiple videos in a directory.
     """
@@ -144,6 +147,8 @@ def batch_process(video_dir: Path, output_dir: Path, config: DetectionTrackerCon
     video_files.sort()
 
     print(f"\nFound {len(video_files)} videos to process")
+    if flip_y:
+        print("All videos will have Y coordinates flipped!")
     print("=" * 70)
 
     # Process each video
@@ -157,7 +162,7 @@ def batch_process(video_dir: Path, output_dir: Path, config: DetectionTrackerCon
         video_output_dir = output_dir / video_path.stem
         video_output_dir.mkdir(parents=True, exist_ok=True)
 
-        if process_video(video_path, video_output_dir, config):
+        if process_video(video_path, video_output_dir, config, flip_y=flip_y):
             success_count += 1
         else:
             failed_videos.append(video_path.name)
@@ -187,6 +192,8 @@ def main():
     parser.add_argument('--output', type=str, default=None, help='Output directory (default: data/viz_output/)')
     parser.add_argument('--max-frames', type=int, default=None, help='Limit frames per video (for quick testing)')
     parser.add_argument('--batch', action='store_true', help='Process all videos in data/video_test/')
+    parser.add_argument('--flip-y', action='store_true',
+                       help='Flip Y coordinates to normalize play direction (use when offense moves right-to-left)')
 
     args = parser.parse_args()
 
@@ -208,7 +215,7 @@ def main():
     # Determine what to process
     if args.batch:
         print_header("Batch Processing Mode")
-        success_count = batch_process(video_test_dir, output_dir, config)
+        success_count = batch_process(video_test_dir, output_dir, config, flip_y=args.flip_y)
     elif args.video:
         # Use specified video
         video_path = Path(args.video)
@@ -220,7 +227,12 @@ def main():
             sys.exit(1)
 
         print_header("Single Video Mode")
-        success = process_video(video_path, output_dir, config, args.max_frames)
+        if args.flip_y:
+            print("X coordinates will be flipped to normalize play direction.")
+
+        video_output_dir = output_dir / video_path.stem
+        video_output_dir.mkdir(parents=True, exist_ok=True)
+        success = process_video(video_path, video_output_dir, config, args.max_frames, flip_y=args.flip_y)
 
         if success:
             print("\nDone!")
@@ -246,9 +258,13 @@ def main():
         print_header("Single Video Mode (auto-selected)")
         print(f"Using: {video_path.name}")
         print(f"Output directory: {output_dir}")
+        if args.flip_y:
+            print("X coordinates will be flipped to normalize play direction.")
         print()
 
-        success = process_video(video_path, output_dir, config, args.max_frames)
+        video_output_dir = output_dir / video_path.stem
+        video_output_dir.mkdir(parents=True, exist_ok=True)
+        success = process_video(video_path, video_output_dir, config, args.max_frames, flip_y=args.flip_y)
 
         if success:
             print("\nDone!")

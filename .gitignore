@@ -36,3 +36,6 @@ training_data/
 # manual labeling modules
 scripts/
 yolo_dataset/
+
+# univeristy report
+report/

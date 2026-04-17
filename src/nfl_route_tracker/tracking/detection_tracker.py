@@ -37,9 +37,20 @@ from nfl_route_tracker.tracking.trajectory_merger import TrajectoryMerger, merge
 # main class
 class DetectionTracker:
     """
-    This class combines YOLO-based player detection with DeepSORT multi-object
+    This class combines YOLO-based player detection with ByteTrack multi-object
     tracking to produce consistent trajectory data from video input.
-    ```
+
+    Features:
+    - YOLO-based player detection
+    - ByteTrack for robust multi-object tracking
+    - Camera motion stabilization
+    - Field orientation correction (rotation to straighten slanted yard lines)
+    - Trajectory merging for fragmented tracks
+    - Optional Y-flip for normalizing play direction
+
+    Coordinate System:
+    - X axis = field length (horizontal, up/down field)
+    - Y axis = field width (vertical, sideline to sideline)
     """
     def __init__(self, config: Optional[DetectionTrackerConfig] = None):
         """
@@ -112,6 +123,8 @@ class DetectionTracker:
         self._total_detections_filtered = 0
         self._total_tracks_output = 0
         self._total_camera_motion = 0.0
+        self._video_width = 0  # Will be set when processing video
+        self._video_height = 0  # Will be set when processing video
 
     # code to process an individual frame, use later to iterate through all frames
     # REMOVE PRINT STATEMENTS
@@ -153,7 +166,8 @@ class DetectionTracker:
     def process_video(self, video_path: str, output_video_path: Optional[str] = None,
                       output_json_path: Optional[str] = None, max_frames: Optional[int] = None,
                       filter_short_trajectories: bool = True, filter_off_field: bool = True,
-                      field_bounds: Optional[Dict] = None) -> TrajectoryStore:
+                      field_bounds: Optional[Dict] = None,
+                      flip_y: bool = False) -> TrajectoryStore:
         """
         Process an entire video file and return trajectory data.
         """
@@ -176,6 +190,8 @@ class DetectionTracker:
         self._total_detections_filtered = 0
         self._total_tracks_output = 0
         self._total_camera_motion = 0.0
+        self._video_width = 0  # Will be set when we open the video
+        self._video_height = 0  # Will be set when we open the video
 
         # Determine output paths
         if output_video_path is None and self.config.save_video:
@@ -187,6 +203,11 @@ class DetectionTracker:
 
         # frame loop
         with VideoLoader(str(video_path)) as video:
+            # Store video dimensions for flip_x
+            self._video_width = video.metadata.width
+            self._video_height = video.metadata.height
+            print(f"Video dimensions: {video.metadata.width}x{video.metadata.height}")
+
             total_frames = min(video.metadata.total_frames, max_frames or float('inf'))
             print(f"Video metadata: {video.metadata}")
             print(f"Total frames to process: {int(total_frames)}")
@@ -203,6 +224,13 @@ class DetectionTracker:
                     print(f"  Yard line angle: {self._field_orientation.yard_line_angle:.1f}°")
                     print(f"  Lines found: {self._field_orientation.all_lines_found}")
                     print(f"  Confidence: {self._field_orientation.confidence:.2f}")
+
+                    # Validate the orientation is correct
+                    print("\n  Validating orientation...")
+                    validation_result = self._field_detector.validate_orientation(frame)
+                    print(f"    {validation_result['message']}")
+                    if not validation_result['is_valid']:
+                        print(f"WARNING: Orientation detection may be incorrect!")
 
                 # Process frame
                 tracks = self.process_frame(frame, frame_id)
@@ -259,6 +287,15 @@ class DetectionTracker:
         # Filter off-field trajectories
         if filter_off_field:
             traj_store = self._filter_off_field_trajectories(traj_store, field_bounds, video.metadata if 'video' in dir() else None)
+
+        # Apply X-flip if requested (for normalizing play direction)
+        if flip_y and self._video_width > 0:
+            print(f"\nFlipping X coordinates (video width: {self._video_width})...")
+            print("  This normalizes play direction so all trajectories face the same way.")
+            traj_store = traj_store.flip_all_x_coordinates(self._video_width)
+            print(f"  Flipped {traj_store.num_trajectories} trajectories")
+        elif flip_y:
+            print("\n⚠️  WARNING: flip_y=True but video width unknown, skipping flip")
 
         if output_json_path:
             self._save_trajectories_json(traj_store, output_json_path)
@@ -524,6 +561,8 @@ class DetectionTracker:
             self._field_detector.reset()
         self._field_orientation = None
         self._field_transform = None
+        self._video_width = 0  # Reset video dimensions for new video
+        self._video_height = 0  # Reset video height for new video
         # Reset NFL filter's area history tracking
         self._nfl_filter.reset_area_history()
         self._total_processing_time = 0.0

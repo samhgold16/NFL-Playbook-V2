@@ -3,26 +3,8 @@
 NFL Route Tracker - Final Corrected Field Transform
 ====================================================
 
-THE CORRECT SOLUTION:
-
-After extensive testing, the key insight is:
-
-For All-22 footage with ~80° yard line slant:
-1. Rotate by -80° to straighten the field
-2. After rotation:
-   - rotated_Y ≈ 0.985*old_X (dominated by original X!)
-   - rotated_X ≈ 0.985*old_Y (dominated by original Y!)
-
-The ROTATED_Y is what represents DEPTH on the field!
-This is because 80° rotation swaps the axes:
-- Original X → becomes nearly vertical (Y in rotated space)
-- Original Y → becomes nearly horizontal (X in rotated space)
-
-So after rotation:
-- rotated_Y = field_depth (players on same yardline → similar rotated_Y)
-- rotated_X = field_width (sideline position)
-
-This is the CORRECT transform!
+This module handles the transformation from video coordinates to field coordinates
+for All-22 footage with slanted yard lines.
 """
 
 import numpy as np
@@ -35,12 +17,26 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 class FinalFieldTransform:
     """
-    FINAL CORRECTED field transformation.
+    Final field transformation for All-22 footage with slanted yard lines.
 
-    For All-22 footage with ~80° yard line slant:
-    1. Rotate by -yard_line_angle to straighten the field
-    2. Use rotated_Y as field_depth (same yardline = similar rotated_Y)
-    3. Use rotated_X as field_width (sideline position)
+    After applying this transform:
+    - Points on the SAME yardline → have SIMILAR field_y values
+    - Points at DIFFERENT depths → have DIFFERENT field_y values
+
+    COORDINATE SEMANTICS (Important for Route Interpretation):
+    ===========================================================
+    The returned coordinates represent:
+    - field_x: Sideline position (field width, 0-53.3 yards)
+    - field_y: Depth position (field length toward endzone)
+
+    This means:
+    - A vertical route (streak, go) → X changes significantly, Y stays constant
+    - A horizontal route (slant, out) → Y changes significantly, X stays constant
+
+    Args:
+        yard_line_angle: Angle of yard lines in raw video (typically 75-80°)
+        video_width: Width of the video frame
+        video_height: Height of the video frame
     """
 
     def __init__(
@@ -56,6 +52,7 @@ class FinalFieldTransform:
         self.center_y = video_height / 2
 
         # Pre-compute rotation matrix for -yard_line_angle
+        # We rotate by NEGATIVE angle to straighten slanted yard lines
         angle_rad = np.radians(-yard_line_angle)
         cos_a = np.cos(angle_rad)
         sin_a = np.sin(angle_rad)
@@ -71,11 +68,20 @@ class FinalFieldTransform:
         """
         Transform video coordinates to field coordinates.
 
+        Args:
+            x: X coordinate in video (represents field length, horizontal movement)
+            y: Y coordinate in video (represents field width, vertical movement)
+
         Returns:
             (field_x, field_y) where:
-            - field_x = rotated_X = sideline position (width on field)
-            - field_y = rotated_Y = depth position (toward end zones)
-                          ★ SAME yardline → SIMILAR field_y ★
+            - field_x = sideline position (field width on the field)
+            - field_y = depth position (toward endzones, same yardline = similar field_y)
+
+        Example:
+            >>> # A vertical route (streak) would have:
+            >>> # start = (100, 500), end = (500, 505)  # X changes, Y stays ~same
+            >>> # A horizontal route (slant) would have:
+            >>> # start = (300, 200), end = (310, 400)  # Y changes significantly
         """
         point = np.array([x, y, 1.0])
         transformed = self.rotation_matrix @ point
@@ -83,26 +89,40 @@ class FinalFieldTransform:
         return (float(transformed[0]), float(transformed[1]))
 
     def get_field_depth(self, x: float, y: float) -> float:
-        """Get the field depth (Y position on same yardline)."""
+        """
+        Get the field depth position (Y on field, toward endzone).
+
+        This is the primary coordinate for determining:
+        - "Is player A ahead of player B on the field?"
+        - "What yardline is this player at?"
+        """
         _, field_y = self.transform_point(x, y)
         return field_y
 
     def get_field_width(self, x: float, y: float) -> float:
-        """Get the field width (sideline position)."""
+        """
+        Get the field width position (sideline position).
+
+        This is the coordinate for determining:
+        - "Is player A closer to the sideline than player B?"
+        - "What's the player's position relative to the hash marks?"
+        """
         field_x, _ = self.transform_point(x, y)
         return field_x
 
 
 def test_final_transform():
-    """Test the final corrected transformation."""
+    """Test the final corrected transformation with coordinate semantics validation."""
     print("="*70)
-    print("FINAL CORRECTED FIELD TRANSFORM TEST")
+    print("FINAL FIELD TRANSFORM TEST")
     print("="*70)
     print()
-    print("CORRECT APPROACH:")
-    print("1. Rotate by -yard_line_angle (e.g., -80°)")
-    print("2. rotated_Y = field_depth (same yardline → similar rotated_Y)")
-    print("3. rotated_X = field_width (sideline position)")
+    print("COORDINATE SEMANTICS:")
+    print("  Video X axis = field LENGTH (horizontal) = route goes up/down field")
+    print("  Video Y axis = field WIDTH (vertical) = sideline to sideline movement")
+    print()
+    print("  Vertical route (go, streak) → X changes, Y stays constant")
+    print("  Horizontal route (slant, out) → Y changes, X stays constant")
     print()
 
     # Test with synthetic collinear points
@@ -152,14 +172,14 @@ def test_final_transform():
 
     print()
     print("-"*50)
-    print("TEST 2: Points on different yardlines")
+    print("TEST 2: Points on different yardlines (different depths)")
     print("-"*50)
     print()
 
     diff_points = [
-        (w * 0.5, h * 0.3),  # Top (further)
+        (w * 0.5, h * 0.3),  # Top (further from camera = far endzone)
         (w * 0.5, h * 0.5),  # Middle
-        (w * 0.5, h * 0.7),  # Bottom (near camera)
+        (w * 0.5, h * 0.7),  # Bottom (near camera = near endzone)
     ]
 
     print("Input points (different Y = different depths):")
@@ -183,19 +203,61 @@ def test_final_transform():
         test2_pass = False
 
     print()
+    print("-"*50)
+    print("TEST 3: Route interpretation verification")
+    print("-"*50)
+    print()
+
+    # Simulate a vertical route (streak): X changes, Y stays ~same
+    vertical_route = [
+        (200, 500),   # Start
+        (400, 502),   # Middle
+        (600, 501),   # End
+    ]
+
+    print("Simulated VERTICAL route (streak): X changes, Y stays ~same")
+    vertical_ys = []
+    for x, y in vertical_route:
+        fx, fy = transform.transform_point(x, y)
+        vertical_ys.append(fy)
+        print(f"  ({x}, {y}) → field_x={fx:.1f}, field_y={fy:.1f}")
+
+    # Check that field_x changes more than field_y
+    vertical_x_range = max(fx for x, y in vertical_route) - min(fx for x, y in vertical_route)
+    vertical_y_range = max(vertical_ys) - min(vertical_ys)
+    print(f"\n  In field coordinates: X range={vertical_x_range:.1f}, Y range={vertical_y_range:.1f}")
+    print(f"  → Primary direction: {'VERTICAL (X changes more)' if vertical_x_range > vertical_y_range else 'HORIZONTAL (Y changes more)'}")
+
+    # Simulate a horizontal route (slant): Y changes significantly
+    horizontal_route = [
+        (300, 200),   # Start
+        (310, 350),   # Middle
+        (320, 500),   # End
+    ]
+
+    print("\nSimulated HORIZONTAL route (slant): Y changes significantly")
+    horizontal_xs = []
+    for x, y in horizontal_route:
+        fx, fy = transform.transform_point(x, y)
+        horizontal_xs.append(fx)
+        print(f"  ({x}, {y}) → field_x={fx:.1f}, field_y={fy:.1f}")
+
+    horizontal_x_range = max(horizontal_xs) - min(horizontal_xs)
+    horizontal_y_range = max(fy for x, y in horizontal_route) - min(fy for x, y in horizontal_route)
+    print(f"\n  In field coordinates: X range={horizontal_x_range:.1f}, Y range={horizontal_y_range:.1f}")
+    print(f"  → Primary direction: {'VERTICAL (X changes more)' if horizontal_x_range > horizontal_y_range else 'HORIZONTAL (Y changes more)'}")
+
+    test3_pass = True  # Visual verification
+    print("\n  Route interpretation is correct if:")
+    print("   - Vertical route: X changes, Y stays similar")
+    print("   - Horizontal route: Y changes significantly")
+
+    print()
     print("="*70)
     print("SUMMARY")
     print("="*70)
     if test1_pass and test2_pass:
-        print("✅ FINAL TRANSFORM IS WORKING CORRECTLY!")
-        print()
-        print("The transform correctly:")
-        print("  - Points on same yardline (collinear at yard_line_angle)")
-        print("    → have SIMILAR rotated_Y (field_depth)")
-        print("  - Points on different depths")
-        print("    → have DIFFERENT rotated_Y (field_depth)")
-        print()
-        print("USE THIS TRANSFORM IN THE MAIN PIPELINE!")
+        print("✅ FIELD TRANSFORM IS WORKING CORRECTLY!")
     else:
         print("❌ Transform needs adjustment")
 

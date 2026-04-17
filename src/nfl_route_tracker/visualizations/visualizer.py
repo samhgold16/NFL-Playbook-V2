@@ -46,11 +46,35 @@ class TrajectoryVisualizer:
         ]
 
     def plot_trajectories(self, store: TrajectoryStore, output_path: Optional[str] = None, title: str = "Tracked Trajectories",
-                          flip_y: bool = True) -> plt.Figure:
+                          flip_y: bool = False, video_height: float = 984,
+                          invert_y_axis: bool = True) -> plt.Figure:
         """
         Plot all trajectories from a TrajectoryStore object.
-        """
 
+        IMPORTANT - Video Coordinate Convention:
+        =========================================
+        In video coordinates:
+        - Y=0 is at the TOP of the frame
+        - Y increases going DOWN toward bottom of frame
+
+        In matplotlib (default):
+        - Y=0 is at the BOTTOM of the plot
+        - Y increases going UP toward top of plot
+
+        By default, we INVERT the y-axis so that the plot matches the video:
+        - Plot TOP = Video TOP (far side of field)
+        - Plot BOTTOM = Video BOTTOM (near side of field)
+
+        Args:
+            store: TrajectoryStore with trajectory data
+            output_path: Where to save the plot
+            title: Plot title
+            flip_y: DEPRECATED - Use invert_y_axis instead.
+                   Kept for backwards compatibility.
+            video_height: Video height for proper coordinate interpretation
+            invert_y_axis: If True (default), invert y-axis so plot matches video
+                          Set to False if you want standard matplotlib coordinates
+        """
         with plt.style.context(self.style):
             fig, ax = plt.subplots(figsize = self.figsize)
 
@@ -66,12 +90,16 @@ class TrajectoryVisualizer:
                     # function for plotting each trace below
                     self._plot_single_trajectory(ax, traj, color)
 
-            # Formatting
-            ax.set_xlabel('X Position (pixels)', fontsize = 12)
-            ax.set_ylabel('Y Position (pixels)', fontsize = 12)
-            ax.set_title(title, fontsize = 14, fontweight = 'bold')
+            # Formatting with CORRECT coordinate semantics
+            ax.set_xlabel('X Position (field length, toward endzone)', fontsize = 12)
+            ax.set_ylabel('Y Position (field width, sideline to sideline)', fontsize = 12)
+            ax.set_title(f"{title}\n(X = up/down field, Y = sideline to sideline)\n"
+                        f"[Y-axis {'INVERTED: top=video TOP, bottom=video BOTTOM' if invert_y_axis else 'NOT inverted: standard matplotlib'}]",
+                        fontsize = 11, fontweight = 'bold')
 
-            if flip_y:
+            # Video coordinates: Y=0 at TOP, Y increases going DOWN
+            # Invert y-axis so plot matches video orientation
+            if invert_y_axis:
                 ax.invert_yaxis()
 
             ax.grid(True, alpha = 0.3)
@@ -111,6 +139,100 @@ class TrajectoryVisualizer:
         # Mark end point (square)
         ax.scatter(xs[-1], ys[-1], s = marker_size**2, color = color, marker = 's',
                    edgecolors = 'white', linewidths = 1.5,zorder = 5)
+
+    def plot_trajectories_with_field_context(self, store: TrajectoryStore,
+                                              output_path: Optional[str] = None,
+                                              title: str = "Trajectories on Field",
+                                              video_width: float = 1920,
+                                              video_height: float = 984,
+                                              invert_y_axis: bool = True) -> plt.Figure:
+        """
+        Plot trajectories with field context and proper axis interpretation.
+
+        This method provides a more intuitive visualization by:
+        1. Using proper axis labels (X = field length, Y = field width)
+        2. Adding route direction interpretation
+        3. Classifying primary route direction for each trajectory
+
+        IMPORTANT - Video Coordinate Convention:
+        =========================================
+        In video coordinates:
+        - Y=0 is at the TOP of the frame
+        - Y increases going DOWN toward bottom of frame
+
+        By default, we INVERT the y-axis so that the plot matches the video.
+
+        Args:
+            store: TrajectoryStore with trajectory data
+            output_path: Where to save the plot
+            title: Plot title
+            video_width: Video width for position normalization
+            video_height: Video height for position normalization
+            invert_y_axis: If True (default), invert y-axis so plot matches video
+
+        Returns:
+            matplotlib Figure
+        """
+        positions = store.get_all_field_positions(video_width, video_height)
+
+        # Local style for this plot
+        linewidth = 2.0
+        marker_size = 8.0
+
+        with plt.style.context(self.style):
+            fig, ax = plt.subplots(figsize = self.figsize)
+
+            trajectories = store.get_all_trajectories()
+
+            if not trajectories:
+                print("WARNING: No trajectories to plot!")
+                ax.text(0.5, 0.5, "No trajectories", ha = 'center', va = 'center',
+                       transform = ax.transAxes, fontsize = 16)
+            else:
+                for i, traj in enumerate(trajectories):
+                    color = self.colors[i % len(self.colors)]
+                    field_pos = positions.get(traj.track_id, {})
+
+                    frames, xs, ys = traj.get_path()
+                    if len(xs) < 2:
+                        continue
+
+                    # Determine route type based on movement
+                    direction = field_pos.get('primary_direction', 'unknown')
+                    route_label = f"Track {traj.track_id}"
+                    if direction != 'unknown':
+                        direction_symbol = "↕" if direction == 'vertical' else "↔"
+                        route_label += f" ({direction_symbol} {direction})"
+
+                    ax.plot(xs, ys, color = color, linewidth = linewidth,
+                           label = route_label, alpha = 0.8)
+                    ax.scatter(xs[0], ys[0], s = marker_size**2, color = color, marker = 'o',
+                              edgecolors = 'white', linewidths = 1.5, zorder = 5)
+                    ax.scatter(xs[-1], ys[-1], s = marker_size**2, color = color, marker = 's',
+                              edgecolors = 'white', linewidths = 1.5, zorder = 5)
+
+            ax.set_xlabel('X = Field Length (horizontal, toward endzone →)', fontsize = 12)
+            ax.set_ylabel('Y = Field Width (vertical, sideline to sideline)', fontsize = 12)
+            ax.set_title(f"{title}\n(↕ = vertical route, ↔ = horizontal route)\n"
+                        f"[Y-axis {'INVERTED: top=video TOP, bottom=video BOTTOM' if invert_y_axis else 'NOT inverted: standard matplotlib'}]",
+                        fontsize = 11, fontweight = 'bold')
+
+            # Video coordinates: Y=0 at TOP, Y increases going DOWN
+            # Invert y-axis so plot matches video orientation
+            if invert_y_axis:
+                ax.invert_yaxis()
+
+            ax.grid(True, alpha = 0.3)
+            ax.set_aspect('equal')
+            ax.legend(loc = 'upper right', fontsize = 8)
+
+            plt.tight_layout()
+
+            if output_path:
+                fig.savefig(output_path, dpi = 150, bbox_inches = 'tight')
+                print(f"Saved trajectory plot to: {output_path}")
+
+            return fig
 
 
 def create_tracking_video(video_path: str, store: TrajectoryStore, output_path: str, fps: Optional[float] = None) -> None:

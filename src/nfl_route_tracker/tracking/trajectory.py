@@ -181,6 +181,62 @@ class Trajectory:
         trajectory.detections = [Detection.from_dict(d) for d in data['detections']]
         return trajectory
 
+    def flip_x_coordinates(self, video_width: float) -> 'Trajectory':
+        """
+        Flip X coordinates to normalize play direction.
+        """
+        flipped_traj = Trajectory(track_id=self.track_id, metadata=self.metadata.copy())
+
+        for det in self.detections:
+            # Flip the X coordinate (mirrors around vertical center)
+            # If player was at x=100 in a 1920-wide video, becomes x=1820
+            flipped_x = video_width - det.x - det.width
+            flipped_det = Detection(
+                frame_id=det.frame_id,
+                x=flipped_x,  # X is mirrored (play direction normalized)
+                y=det.y,      # Y stays the same (sideline position unchanged)
+                width=det.width,
+                height=det.height,
+                confidence=det.confidence
+            )
+            flipped_traj.add_detection(flipped_det)
+
+        return flipped_traj
+
+    def get_field_position(self, video_width: float, video_height: float) -> Dict:
+        """
+        Get the approximate field position interpretation of this trajectory.
+
+        """
+        if len(self.detections) < 2:
+            return {
+                'start_x': 0.5, 'start_y': 0.5,
+                'end_x': 0.5, 'end_y': 0.5,
+                'dx': 0, 'dy': 0,
+                'primary_direction': 'unknown'
+            }
+
+        first_det = self.detections[0]
+        last_det = self.detections[-1]
+
+        start_x = first_det.center[0] / video_width
+        start_y = first_det.center[1] / video_height
+        end_x = last_det.center[0] / video_width
+        end_y = last_det.center[1] / video_height
+
+        dx = end_x - start_x
+        dy = end_y - start_y
+
+        # Primary direction is whichever changed more
+        primary_direction = 'vertical' if abs(dx) >= abs(dy) else 'horizontal'
+
+        return {
+            'start_x': start_x, 'start_y': start_y,
+            'end_x': end_x, 'end_y': end_y,
+            'dx': dx, 'dy': dy,
+            'primary_direction': primary_direction
+        }
+
 # takes from Trajectory class
 class TrajectoryStore:
     """
@@ -296,3 +352,25 @@ class TrajectoryStore:
               f"{store.total_detections} detections")
 
         return store
+
+    def flip_all_x_coordinates(self, video_width: float) -> 'TrajectoryStore':
+        """
+        Flip X coordinates for all trajectories in the store.
+        """
+        flipped_store = TrajectoryStore()
+
+        for traj in self._trajectories.values():
+            flipped_traj = traj.flip_x_coordinates(video_width)
+            flipped_store._trajectories[flipped_traj.track_id] = flipped_traj
+            flipped_store._total_detections += len(flipped_traj)
+
+        return flipped_store
+
+    def get_all_field_positions(self, video_width: float, video_height: float) -> Dict[int, Dict]:
+        """
+        Get field position analysis for all trajectories.
+        """
+        positions = {}
+        for traj in self._trajectories.values():
+            positions[traj.track_id] = traj.get_field_position(video_width, video_height)
+        return positions
