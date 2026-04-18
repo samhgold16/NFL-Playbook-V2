@@ -70,23 +70,22 @@ from .skill_players import (
     # normalize_trajectory,
     # resample_trajectory,
     # extract_trajectory_features,
-    # # Synthetic route generation
-    # SyntheticRouteGenerator,
-    # RouteType,
-    # generate_synthetic_dataset,
-    # # Route types
-    # STREAK_ROUTES,
-    # SLANT_ROUTES,
-    # POST_ROUTES,
-    # CORNER_ROUTES,
-    # DRAG_ROUTES,
-    # HITCH_ROUTES,
-    # IN_ROUTES,
-    # DIG_ROUTES,
-    # COMEBACK_ROUTES,
-    # FLAT_ROUTES,
-    # WHEEL_ROUTES,
-    # ALL_ROUTE_TYPES,
+    # Synthetic route generation
+    SyntheticRouteGenerator,
+    RouteType,
+    generate_synthetic_dataset,
+    # Route types
+    STREAK_ROUTES,
+    SLANT_ROUTES,
+    POST_ROUTES,
+    CORNER_ROUTES,
+    DRAG_ROUTES,
+    CURL_ROUTES,
+    DIG_ROUTES,
+    COMEBACK_ROUTES,
+    FLAT_ROUTES,
+    WHEEL_ROUTES,
+    ALL_ROUTE_TYPES,
 )
 
 __all__ = [
@@ -149,22 +148,21 @@ __all__ = [
     # 'resample_trajectory',
     # 'extract_trajectory_features',
 
-    # # Phase 2 - Synthetic route generation
-    # 'SyntheticRouteGenerator',
-    # 'RouteType',
-    # 'generate_synthetic_dataset',
+    # Phase 2 - Synthetic route generation
+    'SyntheticRouteGenerator',
+    'RouteType',
+    'generate_synthetic_dataset',
 
-    # # Phase 2 - Route types
-    # 'STREAK_ROUTES',
-    # 'SLANT_ROUTES',
-    # 'POST_ROUTES',
-    # 'CORNER_ROUTES',
-    # 'DRAG_ROUTES',
-    # 'HITCH_ROUTES',
-    # 'IN_ROUTES',
-    # 'DIG_ROUTES',
-    # 'COMEBACK_ROUTES',
-    # 'FLAT_ROUTES',
-    # 'WHEEL_ROUTES',
-    # 'ALL_ROUTE_TYPES',
+    # Phase 2 - Route types
+    'STREAK_ROUTES',
+    'SLANT_ROUTES',
+    'POST_ROUTES',
+    'CORNER_ROUTES',
+    'DRAG_ROUTES',
+    'CURL_ROUTES',
+    'DIG_ROUTES',
+    'COMEBACK_ROUTES',
+    'FLAT_ROUTES',
+    'WHEEL_ROUTES',
+    'ALL_ROUTE_TYPES',
 ]

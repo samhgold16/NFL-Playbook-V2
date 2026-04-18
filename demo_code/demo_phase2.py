@@ -26,10 +26,10 @@ from nfl_route_tracker.skill_players import (
     SkillPositionFilter,
     filter_skill_position_players,
     PlayerClassification,
-    #SyntheticRouteGenerator,
-    #generate_synthetic_dataset,
-    #RouteType,
-    #ALL_ROUTE_TYPES,
+    SyntheticRouteGenerator,
+    generate_synthetic_dataset,
+    RouteType,
+    ALL_ROUTE_TYPES,
 )
 from nfl_route_tracker.tracking.trajectory import TrajectoryStore
 from nfl_route_tracker.core.video_loader import VideoLoader
@@ -370,33 +370,86 @@ def process_single_json(json_path: Path,
     }
 
 
-# def demo_synthetic_routes(output_dir: Path) -> None:
-#     """
-#     Generate and display synthetic route examples.
+def demo_synthetic_routes(output_dir: Path) -> None:
+    """
+    Generate and display synthetic route examples.
 
-#     Args:
-#         output_dir: Directory to save outputs
-#     """
-#     print_section("Synthetic Route Generation Demo")
+    Args:
+        output_dir: Directory to save outputs
+    """
+    print_section("Synthetic Route Generation Demo")
 
-#     # Generate dataset
-#     generator = SyntheticRouteGenerator(random_seed=42)
-#     synthetic_routes = generator.generate_dataset(
-#         route_types=ALL_ROUTE_TYPES,
-#         routes_per_type=10,  # Few examples for visualization
-#         param_variations=True
-#     )
+    # Generate dataset
+    generator = SyntheticRouteGenerator(random_seed=42)
+    synthetic_routes = generator.generate_dataset(
+        route_types=ALL_ROUTE_TYPES,
+        routes_per_type=1,  # Few examples for visualization
+        param_variations=True
+    )
 
-#     print(f"  Generated {len(synthetic_routes)} synthetic routes")
+    print(f"  Generated {len(synthetic_routes)} synthetic routes")
 
-#     # Visualize
-#     visualizer = Phase2Visualizer()
-#     output_path = output_dir / "synthetic_routes_demo.png"
+    # Visualize
+    visualizer = Phase2Visualizer()
+    output_path = output_dir / "synthetic_routes_demo.png"
 
-#     fig = visualizer.plot_synthetic_routes(synthetic_routes, str(output_path))
-#     plt.close(fig)
+    fig = visualizer.plot_synthetic_routes(synthetic_routes, str(output_path))
+    plt.close(fig)
 
-#     print(f"  Saved synthetic routes visualization to: {output_path}")
+    print(f"  Saved synthetic routes visualization to: {output_path}")
+
+def plot_single_route_variations(route_type: RouteType, n: int = 20,
+                                 output_dir: Optional[Path] = None, random_seed: Optional[int] = None,) -> plt.Figure:
+    """
+    Generate n variations of a single route type and plot them all together.
+    Useful for visually verifying route shape and parameter variation.
+    """
+    from nfl_route_tracker.skill_players.synthetic_route_generator import (
+        SyntheticRouteGenerator,
+    )
+
+    generator = SyntheticRouteGenerator(random_seed=random_seed)
+    routes = [
+        generator.generate(route_type)   # _random_params() used internally
+        for _ in range(n)
+    ]
+
+    with plt.style.context('dark_background'):
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        # Use a colormap so overlapping routes are distinguishable
+        colors = plt.cm.plasma(np.linspace(0.15, 0.9, n))
+
+        for route, color in zip(routes, colors):
+            ax.plot(route.x_coords, route.y_coords,
+                    color=color, linewidth=1.8, alpha=0.75)
+            # Mark start with a dot
+            ax.scatter(route.x_coords[0], route.y_coords[0],
+                       color=color, s=40, zorder=5, marker='o')
+            # Mark end with a small arrow-like triangle
+            ax.scatter(route.x_coords[-1], route.y_coords[-1],
+                       color=color, s=60, zorder=5, marker='>')
+
+        ax.set_xlim(-0.05, 1.05)
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_xlabel('X  (Field Length — upfield →)', fontsize=12)
+        ax.set_ylabel('Y  (Field Width — sideline ↕)', fontsize=12)
+        ax.set_title(
+            f'{route_type.value.upper()} route — {n} variations',
+            fontsize=14, fontweight='bold'
+        )
+        ax.grid(True, alpha=0.25)
+        ax.set_aspect('equal')
+        plt.tight_layout()
+
+        if output_dir is not None:
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            out_path = output_dir / f"route_variations_{route_type.value}_{n}.png"
+            fig.savefig(out_path, dpi=150, bbox_inches='tight')
+            print(f"Saved: {out_path}")
+
+    return fig
 
 
 def main():
@@ -427,6 +480,8 @@ Route Movement Patterns:
                        help='Video height (default: 984)')
     parser.add_argument('--synthetic', action='store_true',
                        help='Generate synthetic route examples')
+    parser.add_argument('--route', type=str, default=None,
+                    help='Route type to preview, e.g. "slant", "post", "wheel"')
 
     args = parser.parse_args()
 
@@ -510,8 +565,17 @@ Route Movement Patterns:
             print(f"  Average skill positions per play: {total_skill / len(results):.1f}")
 
     # Generate synthetic routes demo
-    # if args.synthetic:
-    #     demo_synthetic_routes(output_dir)
+    if args.synthetic:
+        demo_synthetic_routes(output_dir)
+
+    if args.route:
+        try:
+            route_type = RouteType(args.route.lower())
+        except ValueError:
+            valid = [r.value for r in RouteType]
+            print(f"ERROR: Unknown route '{args.route}'. Valid options: {valid}")
+
+        plot_single_route_variations(route_type=route_type, output_dir=output_dir)
 
     # Default: Find first JSON in viz_output2
     if not args.json and not args.dir and not args.synthetic:
