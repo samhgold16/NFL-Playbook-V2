@@ -53,7 +53,9 @@ class Detection:
     @classmethod
     def from_dict(cls, data: dict) -> 'Detection':
         """Create Detection from dictionary."""
-        return cls(**data)
+        clean = {k: v for k, v in data.items()
+                if k in ('frame_id', 'x', 'y', 'width', 'height', 'confidence')}
+        return cls(**clean)
 
 
 @dataclass
