@@ -2,8 +2,7 @@
 NFL Route Tracker - Detection Tracker Pipeline
 ===============================================
 
-Unified pipeline combining YOLO detection with DeepSORT tracking.
-Uses classes from player_detector.py and object_tracker.py
+MAIN pipeline combining YOLO detection with ByeTrack tracking.
 """
 
 # important packages
@@ -39,23 +38,8 @@ class DetectionTracker:
     """
     This class combines YOLO-based player detection with ByteTrack multi-object
     tracking to produce consistent trajectory data from video input.
-
-    Features:
-    - YOLO-based player detection
-    - ByteTrack for robust multi-object tracking
-    - Camera motion stabilization
-    - Field orientation correction (rotation to straighten slanted yard lines)
-    - Trajectory merging for fragmented tracks
-    - Optional Y-flip for normalizing play direction
-
-    Coordinate System:
-    - X axis = field length (horizontal, up/down field)
-    - Y axis = field width (vertical, sideline to sideline)
     """
     def __init__(self, config: Optional[DetectionTrackerConfig] = None):
-        """
-        Initialize the detection + tracking pipeline.
-        """
         # set DetectorConfig and TrackerConfig attributes or use global
         self.config = config or DetectionTrackerConfig()
 
@@ -71,7 +55,8 @@ class DetectionTracker:
         print("\nInitializing ByteTrack Tracker...")
         self._tracker = ByteTrackTracker(self.config.tracker_config, yolo_model = self._detector.model)
 
-        # - Use standalone CameraStabilizer for trajectory stabilization
+        # use standalone CameraStabilizer for trajectory stabilization
+        # built in bytetrack or camera stabilizer module
         if self.config.field_orientation_config.enabled:
             print("Field orientation enabled - using CameraStabilizer for per-frame motion")
             print("  (ByteTrack GMC disabled for proper field correction)")
@@ -96,8 +81,7 @@ class DetectionTracker:
         )
         self._merger_enabled = self.config.tracker_config.enable_trajectory_merging
 
-        # Initialize Field Orientation Detector (for perspective correction)
-        # This runs ONCE per video on the first frame to correct camera angle
+        # Initialize Field Orientation Detector for perspective correction
         if self.config.field_orientation_config.enabled:
             print("Initializing FIXED Field Orientation Detector...")
             self._field_detector = FixedFieldOrientationDetector(
@@ -127,7 +111,6 @@ class DetectionTracker:
         self._video_height = 0  # Will be set when processing video
 
     # code to process an individual frame, use later to iterate through all frames
-    # REMOVE PRINT STATEMENTS
     def process_frame(self, frame: np.ndarray, frame_id: Optional[int] = None) -> List[Track]:
         """
         Process a single frame through the detection + tracking pipeline.
@@ -183,15 +166,15 @@ class DetectionTracker:
             self._camera_stabilizer.reset()
         if self._field_detector:
             self._field_detector.reset()
-        self._field_orientation = None  # Will be set on first frame
+        self._field_orientation = None 
         self._total_processing_time = 0.0
         self._frames_processed = 0
         self._total_detections_raw = 0
         self._total_detections_filtered = 0
         self._total_tracks_output = 0
         self._total_camera_motion = 0.0
-        self._video_width = 0  # Will be set when we open the video
-        self._video_height = 0  # Will be set when we open the video
+        self._video_width = 0 
+        self._video_height = 0 
 
         # Determine output paths
         if output_video_path is None and self.config.save_video:
@@ -216,21 +199,13 @@ class DetectionTracker:
                 if frame_id >= total_frames:
                     break
 
-                # Detect field orientation on FIRST frame only
-                # This corrects for the initial camera angle/perspective
+                # Detect field orientation on FIRST frame only to correct for the initial camera angle/perspective
                 if frame_id == 0 and self._field_detector is not None and self.config.field_orientation_config.enabled:
                     print("\nDetecting field orientation from first frame...")
                     self._field_orientation = self._field_detector.detect_and_compute(frame)
                     print(f"  Yard line angle: {self._field_orientation.yard_line_angle:.1f}°")
                     print(f"  Lines found: {self._field_orientation.all_lines_found}")
                     print(f"  Confidence: {self._field_orientation.confidence:.2f}")
-
-                    # Validate the orientation is correct
-                    print("\n  Validating orientation...")
-                    validation_result = self._field_detector.validate_orientation(frame)
-                    print(f"    {validation_result['message']}")
-                    if not validation_result['is_valid']:
-                        print(f"WARNING: Orientation detection may be incorrect!")
 
                 # Process frame
                 tracks = self.process_frame(frame, frame_id)
@@ -256,7 +231,7 @@ class DetectionTracker:
             video_writer.release()
             print(f"Output video saved: {output_video_path}")
 
-        # POST PROCESSING 
+        # POST PROCESSING CODE AFTER GETTING TRAJECTORIES
 
         # Getting and filtering trajectories
         traj_store = self._tracker.get_trajectory_store()
@@ -274,12 +249,11 @@ class DetectionTracker:
             print("\nSkipping camera stabilization")
 
         # Apply field orientation correction to transform to orthogonal coordinates
-        # This runs ONCE after tracking to correct the camera's initial perspective
         if self._field_detector is not None and self.config.field_orientation_config.enabled:
             print("\nApplying field orientation rotation...")
             traj_store = self._apply_field_orientation_correction(traj_store)
 
-        # filtering out noise trajs
+        # filtering out noisey bad trajs
         if filter_short_trajectories:
             min_length = self.config.tracker_config.min_trajectory_length
             traj_store = self._filter_short_trajectories(traj_store, min_length)
@@ -288,14 +262,14 @@ class DetectionTracker:
         if filter_off_field:
             traj_store = self._filter_off_field_trajectories(traj_store, field_bounds, video.metadata if 'video' in dir() else None)
 
-        # Apply X-flip if requested (for normalizing play direction)
+        # Apply X-flip if stated (for normalizing play direction)
         if flip_y and self._video_width > 0:
             print(f"\nFlipping X coordinates (video width: {self._video_width})...")
             print("  This normalizes play direction so all trajectories face the same way.")
             traj_store = traj_store.flip_all_x_coordinates(self._video_width)
             print(f"  Flipped {traj_store.num_trajectories} trajectories")
         elif flip_y:
-            print("\n⚠️  WARNING: flip_y=True but video width unknown, skipping flip")
+            print("Skipping flip")
 
         if output_json_path:
             self._save_trajectories_json(traj_store, output_json_path)
@@ -304,7 +278,7 @@ class DetectionTracker:
     
     def _filter_detections(self, detections: List[DetectionResult], frame_height: int = 984) -> List[DetectionResult]:
         """
-        Filter detections to remove invalid sizes and shapes.
+        Filter detections to remove invalid sizes and shapes, calls nfl_filter module
         """
         # Apply NFL filter
         filtered = self._nfl_filter.filter_detections(detections, frame_height)
@@ -325,6 +299,7 @@ class DetectionTracker:
         filtered_store = TrajectoryStore()
         removed_count = 0
 
+        # min length specified in config, filtering them out
         for traj in store.get_all_trajectories():
             if len(traj) >= min_length:
                 for det in traj.detections:
@@ -354,11 +329,9 @@ class DetectionTracker:
 
         # Create FinalFieldTransform if not already created
         if self._field_transform is None:
-            self._field_transform = FinalFieldTransform(
-                yard_line_angle=yard_line_angle,
-                video_width=self.config.field_orientation_config.video_width,
-                video_height=self.config.field_orientation_config.video_height
-            )
+            self._field_transform = FinalFieldTransform(yard_line_angle = yard_line_angle,
+                                                        video_width = self.config.field_orientation_config.video_width,
+                                                        video_height = self.config.field_orientation_config.video_height)
 
         print(f"  Applying FINAL field transformation...")
         corrected_store = TrajectoryStore()
@@ -368,11 +341,6 @@ class DetectionTracker:
                 # Get center coordinates
                 x, y = det.center[0], det.center[1]
 
-                # Apply FinalFieldTransform
-                # Returns (field_x, field_y) where:
-                # - field_y = depth (same yardline → similar values)
-                # - field_x = width (sideline position)
-
                 # HERE HERE HERE HERE 
                 #field_x, field_y = self._field_transform.transform_point(x, y)
                 field_x, field_y = self._apply_transform(x, y, homography) 
@@ -380,18 +348,11 @@ class DetectionTracker:
                 # Create corrected detection with new coordinates
                 det_width = det.width
                 det_height = det.height
-                corrected_det = Detection(
-                    frame_id=det.frame_id,
-                    x=field_x - det_width / 2,
-                    y=field_y - det_height / 2,
-                    width=det_width,
-                    height=det_height,
-                    confidence=det.confidence
-                )
+                corrected_det = Detection(frame_id = det.frame_id, x = field_x - det_width / 2, y = field_y - det_height / 2,
+                                          width = det_width, height = det_height, confidence = det.confidence)
 
                 corrected_store.add_detection(traj.track_id, corrected_det)
 
-        print(f"  Corrected {store.num_trajectories} trajectories")
         return corrected_store
     
     def _apply_transform(self, x: float, y: float, transform: np.ndarray) -> Tuple[float, float]:
@@ -406,6 +367,7 @@ class DetectionTracker:
         else:
             return (float(transformed[0]), float(transformed[1]))
     
+    # helpful for removing sideline players and fans in crowd at end of video
     def _filter_off_field_trajectories(self, store: TrajectoryStore, field_bounds: Optional[Dict] = None, video_metadata = None) -> TrajectoryStore:
         """
         Remove trajectories that spend the majority of their time off the field.
@@ -422,6 +384,7 @@ class DetectionTracker:
         filtered_store = TrajectoryStore()
         off_field_count = 0
  
+        # loop through trajctories and check criteria
         for trajectory in store.get_all_trajectories():
             total = len(trajectory.detections)
             in_bounds = sum(1 for det in trajectory.detections
@@ -456,6 +419,7 @@ class DetectionTracker:
                             'total_camera_motion_pixels': self._total_camera_motion},
                 'trajectories': []}
 
+        # main format that trajctories are formatted in, must match simulated data for downstream modeling
         for traj in store.get_all_trajectories():
             traj_data = {'track_id': traj.track_id,
                         'num_detections': len(traj),
@@ -478,7 +442,7 @@ class DetectionTracker:
 
         print(f"Trajectories saved: {filepath}")
 
-    # change here to customize bounding box visualizations
+    # customizing bounding box visualizations
     def _draw_tracks(self, frame: np.ndarray, tracks: List[Track]) -> np.ndarray:
         """
         Draw track bounding boxes and IDs on a frame.
@@ -567,9 +531,8 @@ class DetectionTracker:
             self._field_detector.reset()
         self._field_orientation = None
         self._field_transform = None
-        self._video_width = 0  # Reset video dimensions for new video
-        self._video_height = 0  # Reset video height for new video
-        # Reset NFL filter's area history tracking
+        self._video_width = 0 
+        self._video_height = 0  
         self._nfl_filter.reset_area_history()
         self._total_processing_time = 0.0
         self._frames_processed = 0

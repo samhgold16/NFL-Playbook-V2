@@ -2,7 +2,8 @@
 NFL Route Tracker - Camera Motion Compensation Module
 =====================================================
 
- Compensates for camera panning/motion in All-22 footage.
+Compensates for camera panning/motion in All-22 footage.
+Need to improve in the future 
 """
 
 # important packages
@@ -66,7 +67,7 @@ class CameraStabilizer:
         self._lk_params = dict(winSize = (21, 21), maxLevel = 3, criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))
 
     # =========================================================================
-    # simple helper
+    # simple helpers
     # =========================================================================
 
     def is_ready(self) -> bool:
@@ -90,15 +91,6 @@ class CameraStabilizer:
     def get_cumulative_transform(self, frame_id: int) -> Optional[np.ndarray]:
         """
         Get the cumulative transform H_{0 -> frame_id} for a specific frame.
-
-        This allows correcting trajectory points to their position as if the
-        camera hadn't moved since frame 0.
-
-        Args:
-            frame_id: The frame number to get the transform for
-
-        Returns:
-            3x3 homography matrix or None if not available
         """
         if frame_id < 0 or frame_id >= len(self._frame_transforms):
             return None
@@ -118,6 +110,7 @@ class CameraStabilizer:
     # main coordinate work
     # =========================================================================
 
+    # apply stability to each detection
     def stabilize_bbox(self, x: float, y: float, w: float, h: float) -> Tuple[float, float, float, float]:
         """
         Apply the cumulative inverse homography to a bounding box.
@@ -156,10 +149,6 @@ class CameraStabilizer:
     def stabilize_trajectory_store(self, store: TrajectoryStore) -> TrajectoryStore:
         """
         Stabilize every detection in every trajectory to first-frame coordinates.
-
-        This method uses the per-frame cumulative transforms stored during update()
-        to correct each detection to its position as if the camera hadn't moved
-        from the first frame.
         """
         if not self.config.enabled:
             return store
@@ -171,16 +160,15 @@ class CameraStabilizer:
                 frame_id = detection.frame_id
 
                 # Get the cumulative transform from frame 0 to current frame
-                # This tells us where a frame-0 point appears in frame_id
                 cumulative_transform = self.get_cumulative_transform(frame_id)
 
                 if cumulative_transform is None:
-                    # If no transform available, use current frame's inverse
+                    # if no transform available, use current frame's inverse
                     sx, sy, sw, sh = self.stabilize_bbox(
                         detection.x, detection.y, detection.width, detection.height
                     )
                 else:
-                    # Apply the stored cumulative inverse to map back to frame 0
+                    # apply the stored cumulative inverse to map back to frame 0
                     x, y = detection.center[0], detection.center[1]
                     point = np.array([x, y, 1.0])
                     transformed = cumulative_transform @ point
@@ -238,8 +226,6 @@ class CameraStabilizer:
                 H_smoothed = self._smooth_transform(H_frame)
 
                 # Compose into cumulative homography  H_{0 -> t}
-                # Reading right-to-left: first apply the old cumulative
-                # transform, then the new per-frame transform.
                 self._cumulative_H = H_smoothed @ self._cumulative_H
                 self._cumulative_inv_H = np.linalg.inv(self._cumulative_H)
 
@@ -315,37 +301,9 @@ class CameraStabilizer:
 
         return good_prev, good_curr, status
 
-    # def _estimate_homography(self, prev_pts: np.ndarray,
-    #                         curr_pts: np.ndarray) -> Optional[np.ndarray]:
-    #     """
-    #     Estimate homography between two sets of matched points.
-    #     """
-    #     if len(prev_pts) < 4:
-    #         return None
-
-    #     H, mask = cv2.findHomography(prev_pts.reshape(-1, 1, 2).astype(np.float32),
-    #                                 curr_pts.reshape(-1, 1, 2).astype(np.float32),
-    #                                 cv2.RANSAC,
-    #                                 ransacReprojThreshold = self.config.ransac_threshold,
-    #                                 maxIters = 2000,
-    #                                 confidence = 0.995,)
-
-    #     if H is None:
-    #         return None
-
-    #     # Reject if fewer than 30 % of matches are inliers
-    #     if mask is not None and np.sum(mask) / len(mask) < 0.3:
-    #         return None
-
-    #     return H
-
-    def _estimate_homography(
-        self,
-        prev_pts: np.ndarray,
-        curr_pts: np.ndarray
-    ) -> Optional[np.ndarray]:
+    def _estimate_homography(self, prev_pts: np.ndarray, curr_pts: np.ndarray) -> Optional[np.ndarray]:
         """
-        Robust homography estimation with zoom-awareness and outlier rejection.
+        Homography estimation with zoom-awareness and outlier rejection.
         """
 
         if len(prev_pts) < 6:
@@ -355,27 +313,19 @@ class CameraStabilizer:
         curr = curr_pts.reshape(-1, 1, 2).astype(np.float32)
 
         # Estimate homography with RANSAC
-        H, mask = cv2.findHomography(
-            prev,
-            curr,
-            method=cv2.RANSAC,
-            ransacReprojThreshold=self.config.ransac_threshold,
-            maxIters=3000,
-            confidence=0.999
-        )
+        H, mask = cv2.findHomography(prev, curr, method = cv2.RANSAC,
+                                    ransacReprojThreshold = self.config.ransac_threshold, maxIters = 3000, confidence = 0.999)
 
         if H is None or mask is None:
             return None
 
         inlier_ratio = float(np.sum(mask)) / len(mask)
 
-        # 🔒 Reject weak solutions
+        # Reject weak solutions
         if inlier_ratio < 0.4:
             return None
 
-        # -------------------------------
-        # 🔍 Decompose transform
-        # -------------------------------
+        # decompose transform
         dx = H[0, 2]
         dy = H[1, 2]
 
@@ -386,10 +336,6 @@ class CameraStabilizer:
 
         # Extract rotation
         rotation = np.arctan2(H[1, 0], H[0, 0])
-
-        # -------------------------------
-        # 🚨 Sanity checks (CRITICAL)
-        # -------------------------------
 
         # Reject crazy zoom jumps
         if not (0.90 < scale < 1.10):
@@ -405,51 +351,13 @@ class CameraStabilizer:
 
         return H
 
-    # def _smooth_transform(self, H: np.ndarray) -> np.ndarray:
-    #     """
-    #     Smooth the per-frame homography using a moving-average window.
-    #     """
-    #     dx = H[0, 2]
-    #     dy = H[1, 2]
-
-    #     # Extract rotation angle from the rotation matrix portion
-    #     # Using atan2(H[1,0], H[0,0]) gives the rotation angle
-    #     # This works because the matrix is [[cos θ, -sin θ], [sin θ, cos θ]] scaled
-    #     da = np.arctan2(H[1, 0], H[0, 0])
-
-    #     # Ignore sub-pixel jitter
-    #     if np.sqrt(dx**2 + dy**2) < self.config.motion_threshold:
-    #         return np.eye(3, dtype=np.float64)
-
-    #     # Store for smoothing
-    #     self._homography_history.append((dx, dy, da))
-
-    #     # Maintain rolling window
-    #     if len(self._homography_history) > self.config.smoothing_window:
-    #         self._homography_history.pop(0)
-
-    #     # Compute smoothed values
-    #     avg_dx = float(np.mean([h[0] for h in self._homography_history]))
-    #     avg_dy = float(np.mean([h[1] for h in self._homography_history]))
-    #     avg_da = float(np.mean([h[2] for h in self._homography_history]))
-
-    #     # Reconstruct rotation matrix from smoothed angle
-    #     cos_a, sin_a = np.cos(avg_da), np.sin(avg_da)
-
-    #     return np.array([[cos_a, -sin_a, avg_dx],
-    #                      [sin_a,  cos_a, avg_dy],
-    #                      [0.0,    0.0,   1.0]], dtype = np.float64)
     
     def _smooth_transform(self, H: np.ndarray) -> np.ndarray:
         """
         Smooth homography including translation, rotation, and scale.
-
-        Uses log-scale averaging for stable zoom smoothing.
         """
 
-        # -------------------------------
-        # 🔍 Decompose transform
-        # -------------------------------
+        # decompoe transform
         dx = float(H[0, 2])
         dy = float(H[1, 2])
 
@@ -461,27 +369,17 @@ class CameraStabilizer:
         scale_y = np.sqrt(H[0, 1]**2 + H[1, 1]**2)
         scale = float((scale_x + scale_y) / 2.0)
 
-        # -------------------------------
-        # 🚫 Ignore tiny motion
-        # -------------------------------
-        if (
-            np.sqrt(dx**2 + dy**2) < self.config.motion_threshold
-            and abs(scale - 1.0) < 0.002
-            and abs(da) < 0.002
-        ):
+        # ignore small motion
+        if (np.sqrt(dx**2 + dy**2) < self.config.motion_threshold and abs(scale - 1.0) < 0.002 and abs(da) < 0.002):
             return np.eye(3, dtype=np.float64)
 
-        # -------------------------------
-        # 📦 Store history
-        # -------------------------------
+        # store history
         self._homography_history.append((dx, dy, da, np.log(scale)))
 
         if len(self._homography_history) > self.config.smoothing_window:
             self._homography_history.pop(0)
 
-        # -------------------------------
-        # 📊 Compute smoothed values
-        # -------------------------------
+        # compute smoothed values
         dxs = [h[0] for h in self._homography_history]
         dys = [h[1] for h in self._homography_history]
         das = [h[2] for h in self._homography_history]
@@ -491,24 +389,17 @@ class CameraStabilizer:
         avg_dy = float(np.mean(dys))
 
         # Circular mean for angles
-        avg_da = float(np.arctan2(
-            np.mean(np.sin(das)),
-            np.mean(np.cos(das))
-        ))
+        avg_da = float(np.arctan2(np.mean(np.sin(das)), np.mean(np.cos(das))))
 
-        # Log-scale averaging (CRITICAL for zoom stability)
+        # Log-scale averaging for zoomiming
         avg_scale = float(np.exp(np.mean(log_scales)))
 
-        # -------------------------------
-        # 🧱 Reconstruct matrix
-        # -------------------------------
+        # reconstruct matrix
         cos_a = np.cos(avg_da)
         sin_a = np.sin(avg_da)
 
-        H_smooth = np.array([
-            [avg_scale * cos_a, -avg_scale * sin_a, avg_dx],
-            [avg_scale * sin_a,  avg_scale * cos_a, avg_dy],
-            [0.0,               0.0,               1.0]
-        ], dtype=np.float64)
+        H_smooth = np.array([[avg_scale * cos_a, -avg_scale * sin_a, avg_dx],
+                            [avg_scale * sin_a,  avg_scale * cos_a, avg_dy],
+                            [0.0, 0.0, 1.0]], dtype = np.float64)
 
         return H_smooth

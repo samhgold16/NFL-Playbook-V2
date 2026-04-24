@@ -2,7 +2,7 @@
 NFL Route Tracker - Player Detector Module
 ===========================================
 
-This module uses YOLO (You Only Look Once) for detecting players in video frames, a more complex attempt than temporal derivative in version1
+This module uses YOLO for detecting players in video frames, a more complex attempt than temporal derivative in version1
 """
 
 # important packages
@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from nfl_route_tracker.core.config import DetectorConfig
 from nfl_route_tracker.core.video_loader import VideoLoader
 
-# similar to MotionBlob in motion_tracker.py
+# similar to MotionBlob in motion_tracker.py from version 1 
 @dataclass
 class DetectionResult:
     """

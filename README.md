@@ -1,6 +1,6 @@
 # NFL Motion Tracker and Route Classifier
 
-## CURRENT PROGRESS
+This project presents a deep learning pipeline for extracting and classifying skill position players' route running patterns from NFL All-22 broadcast footage. Computer vision is leveraged to classify and track player movement and various model architectures are compared by performing route classification on a combination of the ALL-22 videos and synthetically generated routes.
 
 *Version 1 - Temporal Differencing*
 
@@ -14,29 +14,19 @@
 
 <img width="800" height="411" alt="test70_tracked-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/85858592-baf0-4e2e-858d-5fbfa1e39fcc" />
 
-## Installation Steps
-
-*INPUT HERE*
-
-## Simple Usage
-
-*INPUT HERE*
-
 ## Project Structure
-
-*NEED TO UPDATE*
 
 ```
 src/nfl_route_tracker/
 ├── core/
 │   ├── __init__.py
 │   ├── config.py               # ALL hyperparameters (ByteTrack, YOLO, NFL filter)
-│   └── video_loader.py         # CV2 video I/O wrapper
+│   └── video_loader.py         # Video processing metadata
 │
 ├── detection/
 │   ├── __init__.py
 │   ├── player_detector.py      # YOLO wrapper (DetectionResult)
-│   └── nfl_filter.py           # NFL-specific filtering
+│   └── nfl_filter.py           # NFL-specific filtering (sideline, referree, etc.)
 │
 ├── tracking/
 │   ├── __init__.py
@@ -46,12 +36,40 @@ src/nfl_route_tracker/
 │   ├── camera_stabilizer.py    # Properly accounting for camera movement for trajectories
 │   ├── trajectory_merger.py    # Merging unique trajectories belonging to same player
 │   ├── field_orientation_detector.py  #  Properly accounting for field angle for trajectories
+│   ├── field_transform.py      #  Actually applies transformation
 │   └── bytetrack.yaml          # Used for ByteTrack
+│
+├── skill_players/
+│   ├── __init__.py
+│   ├── manual_labeler.py              # Main pipeline orchestrator
+│   ├── offense_defense_classifier.py  # Data structures (Detection, Trajectory, TrajectoryStore)
+│   ├── pipeline.py                    # Properly accounting for camera movement for trajectories
+│   ├── prepare_image_data.py          # Merging unique trajectories belonging to same player
+│   ├── skill_position_filter.py       #  Properly accounting for field angle for trajectories
+│   ├── synthetic_route_generator.py   #  Generates the simulated routes
+│   └── training_data_prep.py          # Used for ByteTrack
+│   └── trajectory_preprocessor.py     # Used for ByteTrack
 │
 └── visualizations/
     ├── __init__.py
     └── visualizer.py           # Matplotlib trajectory plotting
 ```
+
+## Classified Route Tree
+
+| Route | Description |
+|-------|-------------|
+| `streak` | Straight upfield |
+| `slant` | Diagonal cut toward the middle |
+| `post` | Upfield then diagonal cut toward center |
+| `corner` | Upfield then diagonal cut toward sideline |
+| `drag` | Horizontal route across the middle |
+| `curl` | Upfield then turn back toward LOS |
+| `dig` | Upfield then cut across middle |
+| `out` | Upfield then cut toward sideline |
+| `comeback` | Deep route then turn back to sideline |
+| `flat` | Short route parallel to LOS |
+| `wheel` | Flat release then arc upfield |
 
 ## Individual Packages
 
@@ -119,8 +137,10 @@ with VideoLoader("video.mp4") as video:
 | ransac_threshold | [0, 10] | Outlier threshold |
 | motion_threshold | [0, 10]| Minimum motion to apply correct |
 
-### Personal Notes 
+## Personal Notes 
 
 *NEED TO FILL OUT PROPERLY*
 
 To run code, run `python demo_code/demo.py` from root directory.
+
+## AI Usage

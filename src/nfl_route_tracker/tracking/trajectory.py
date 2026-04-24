@@ -2,8 +2,7 @@
 NFL Route Tracker - Trajectory Module
 =====================================
 
-This module handles the storage and analysis of object trajectories.
-A trajectory is simply a sequence of positions over time.
+This module handles the storage and analysis of object trajectories after procesing the videos
 """
 
 # important packages
@@ -20,7 +19,6 @@ import pandas as pd
 class Detection:
     """
     A single detection of an object in ONE frame.
-    Represents what the motion detector found at one moment in time.
     """
     frame_id: int
     x: float  
@@ -82,7 +80,6 @@ class Trajectory:
         """
         Extract the path as coordinate arrays.
         """
-
         if not self.detections:
             return np.array([]), np.array([]), np.array([])
 
@@ -191,16 +188,9 @@ class Trajectory:
 
         for det in self.detections:
             # Flip the X coordinate (mirrors around vertical center)
-            # If player was at x=100 in a 1920-wide video, becomes x=1820
             flipped_x = video_width - det.x - det.width
-            flipped_det = Detection(
-                frame_id=det.frame_id,
-                x=flipped_x,  # X is mirrored (play direction normalized)
-                y=det.y,      # Y stays the same (sideline position unchanged)
-                width=det.width,
-                height=det.height,
-                confidence=det.confidence
-            )
+            flipped_det = Detection(frame_id = det.frame_id, x = flipped_x, y = det.y,    
+                                    width = det.width, height = det.height, confidence = det.confidence)
             flipped_traj.add_detection(flipped_det)
 
         return flipped_traj
@@ -208,15 +198,12 @@ class Trajectory:
     def get_field_position(self, video_width: float, video_height: float) -> Dict:
         """
         Get the approximate field position interpretation of this trajectory.
-
         """
         if len(self.detections) < 2:
-            return {
-                'start_x': 0.5, 'start_y': 0.5,
-                'end_x': 0.5, 'end_y': 0.5,
-                'dx': 0, 'dy': 0,
-                'primary_direction': 'unknown'
-            }
+            return {'start_x': 0.5, 'start_y': 0.5,
+                    'end_x': 0.5, 'end_y': 0.5,
+                    'dx': 0, 'dy': 0,
+                    'primary_direction': 'unknown'}
 
         first_det = self.detections[0]
         last_det = self.detections[-1]
@@ -232,19 +219,16 @@ class Trajectory:
         # Primary direction is whichever changed more
         primary_direction = 'vertical' if abs(dx) >= abs(dy) else 'horizontal'
 
-        return {
-            'start_x': start_x, 'start_y': start_y,
-            'end_x': end_x, 'end_y': end_y,
-            'dx': dx, 'dy': dy,
-            'primary_direction': primary_direction
-        }
+        return {'start_x': start_x, 'start_y': start_y,
+                'end_x': end_x, 'end_y': end_y,
+                'dx': dx, 'dy': dy,
+                'primary_direction': primary_direction}
 
 # takes from Trajectory class
 class TrajectoryStore:
     """
     Manages and stores multiple trajectories.
     """
-
     def __init__(self):
         """Initialize empty trajectory store."""
         # Dictionary mapping track_id -> Trajectory
@@ -306,15 +290,9 @@ class TrajectoryStore:
         for traj in self._trajectories.values():
             for det in traj.detections:
                 cx, cy = det.center
-                rows.append({'track_id': traj.track_id,
-                             'frame_id': det.frame_id,
-                             'x': det.x,
-                             'y': det.y,
-                             'width': det.width,
-                             'height': det.height,
-                             'confidence': det.confidence,
-                             'center_x': cx,
-                             'center_y': cy})
+                rows.append({'track_id': traj.track_id, 'frame_id': det.frame_id, 'x': det.x, 'y': det.y,
+                             'width': det.width, 'height': det.height, 'confidence': det.confidence,
+                             'center_x': cx, 'center_y': cy})
 
         return pd.DataFrame(rows)
 

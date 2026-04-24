@@ -114,6 +114,7 @@ class ByteTrackTracker:
         with open(project_yaml, 'w') as f:
             f.write(yaml_content)
 
+    # function that calls from config.py to create a new yaml file if hyperparameters are changed
     def _generate_bytetrack_yaml(self) -> str:
         """
         Generate ByteTrack YAML content from config parameters.
@@ -121,10 +122,8 @@ class ByteTrackTracker:
         # Handle gmc_method (convert None to 'none' for YAML)
         gmc_method = self.config.gmc_method if self.config.gmc_method else 'none'
 
-
         return f"""
                 # ByteTrack Configuration for NFL All-22 Tracking
-                # Auto-generated from config.py - Do not edit manually
                 # Modify TrackerConfig in config.py instead
 
                     # Tracker type
@@ -155,6 +154,7 @@ class ByteTrackTracker:
         """
         self.yolo_model = model
 
+    # used when tracking wasnt stable, not needed anymore
     def _is_ghost_box(self, track_id: int, bbox: Tuple[float, float, float, float],
                       confidence: float) -> bool:
         """
@@ -200,6 +200,7 @@ class ByteTrackTracker:
 
         return interpolated
 
+    # main mechanism to process frames and store detections
     def update(self, frame: np.ndarray, detections: List[DetectionResult],
                frame_id: Optional[int] = None) -> List[Track]:
         """
@@ -280,7 +281,7 @@ class ByteTrackTracker:
             if lost_id in seen_track_ids:
                 # Track was found, interpolate any gap
                 if self._lost_tracks[lost_id] > 1 and lost_id in self._kalman_predictions:
-                    # We had a gap - interpolate
+                    # interpolate if gap fiund
                     gap_size = self._lost_tracks[lost_id]
                     if gap_size <= self.config.max_trajectory_gap:
                         # Get last known position and interpolate to current

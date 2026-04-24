@@ -3,6 +3,7 @@ NFL Route Tracker - Trajectory Post-Processing Module
 ====================================================
 
 This module handles post-processing of trajectories to merge fragmented tracks.
+Was very help pre manual training, not necessarry anymore
 """
 
 import numpy as np
@@ -50,7 +51,6 @@ class TrajectoryMerger:
     def merge_trajectories(self, store: TrajectoryStore) -> TrajectoryStore:
         """
         Merge fragmented trajectories in a TrajectoryStore.
-        Returns a new TrajectoryStore with merged trajectories.
         """
         trajectories = store.get_all_trajectories()
 
@@ -116,14 +116,9 @@ class TrajectoryMerger:
 
         return merged_store
     
-    def _collect_endpoints(
-        self, trajectories: List[Trajectory]
-    ) -> List[Tuple[float, float]]:
+    def _collect_endpoints(self, trajectories: List[Trajectory]) -> List[Tuple[float, float]]:
         """
         Return every trajectory start- and end-position as a flat list.
- 
-        This list is used by the crowd density filter to cheaply estimate how
-        many players are beginning or finishing their routes near any given point.
         """
         pts: List[Tuple[float, float]] = []
         for t in trajectories:
@@ -131,12 +126,7 @@ class TrajectoryMerger:
             pts.append(self._get_end_position(t))
         return pts
  
-    def _count_nearby_endpoints(
-        self,
-        point: Tuple[float, float],
-        all_endpoints: List[Tuple[float, float]],
-        radius: float,
-    ) -> int:
+    def _count_nearby_endpoints(self, point: Tuple[float, float], all_endpoints: List[Tuple[float, float]], radius: float,) -> int:
         """Count how many endpoints fall within `radius` pixels of `point`."""
         px, py = point
         count = 0
@@ -145,37 +135,18 @@ class TrajectoryMerger:
                 count += 1
         return count
     
-    def _is_crowded(
-        self,
-        join_point: Tuple[float, float],
-        all_endpoints: List[Tuple[float, float]],
-    ) -> bool:
+    # used for ignoring offensive lineman close trajectories
+    def _is_crowded(self, join_point: Tuple[float, float], all_endpoints: List[Tuple[float, float]],) -> bool:
         """
-        Return True when the neighbourhood around `join_point` contains too
-        many endpoints to safely infer that any two specific trajectories belong
-        to the same player.
- 
-        The join-point is the midpoint between the end of fragment A and the
-        start of fragment B — the location where the hypothetical merge would
-        occur.
+        Return True when too many people in same location to ignore
         """
-        nearby = self._count_nearby_endpoints(
-            join_point, all_endpoints, self.density_radius
-        )
+        nearby = self._count_nearby_endpoints(join_point, all_endpoints, self.density_radius)
         return nearby > self.density_threshold
     
-    def _find_merge_candidates(
-        self,
-        trajectories: List[Trajectory],
-        all_endpoints: List[Tuple[float, float]],
-        merge_counts: Dict[int, int],
-    ) -> List[MergeCandidate]:
+    def _find_merge_candidates(self, trajectories: List[Trajectory],
+                               all_endpoints: List[Tuple[float, float]], merge_counts: Dict[int, int],) -> List[MergeCandidate]:
         """
         Find all pairs of trajectories that could be merged.
- 
-        Two pre-filters run before the expensive scoring:
-          1. Crowd density — skip if the join region is congested.
-          2. Chain limit   — skip if either trajectory has been merged too often.
         """
         candidates: List[MergeCandidate] = []
         sorted_trajs = sorted(trajectories, key=lambda t: t.get_frame_range()[0])
@@ -201,69 +172,44 @@ class TrajectoryMerger:
                 if spatial_distance > self.spatial_threshold:
                     continue
  
-                # ---- Filter 1: crowd density --------------------------------
-                # The join-point is the midpoint between the two fragment edges.
-                join_point = (
-                    (end_pos_a[0] + start_pos_b[0]) / 2.0,
-                    (end_pos_a[1] + start_pos_b[1]) / 2.0,
-                )
+                # filter crowd density using helper
+                join_point = ((end_pos_a[0] + start_pos_b[0]) / 2.0,
+                              (end_pos_a[1] + start_pos_b[1]) / 2.0)
                 if self._is_crowded(join_point, all_endpoints):
-                    continue  # too many players nearby — skip this pair
+                    continue  
  
-                # ---- Filter 2: merge-chain limit ----------------------------
-                # Reject if either participant has already hit the merge cap.
-                if (
-                    merge_counts.get(traj_a.track_id, 0) >= self.max_merges
-                    or merge_counts.get(traj_b.track_id, 0) >= self.max_merges
-                ):
+                # enforce merge chain limit, also helpful for crowded areas
+                if (merge_counts.get(traj_a.track_id, 0) >= self.max_merges or merge_counts.get(traj_b.track_id, 0) >= self.max_merges):
                     continue
  
-                # ---- Confidence scoring (unchanged from v1) -----------------
+                # confidence scoring, manual 
                 direction_score = self._calculate_direction_score(traj_a, traj_b)
                 size_similarity = self._calculate_size_similarity(traj_a, traj_b)
  
                 spatial_score = 1.0 - (spatial_distance / self.spatial_threshold)
                 temporal_score = 1.0 - (temporal_gap / self.temporal_threshold)
-                confidence = (
-                    0.4 * spatial_score
-                    + 0.3 * temporal_score
-                    + self.direction_weight * direction_score
-                    + self.size_weight * size_similarity
-                )
+                confidence = (0.4 * spatial_score  + 0.3 * temporal_score + self.direction_weight * direction_score + self.size_weight * size_similarity)
  
                 if confidence >= self.confidence_threshold:
-                    candidates.append(
-                        MergeCandidate(
-                            traj_a_id=traj_a.track_id,
-                            traj_b_id=traj_b.track_id,
-                            spatial_distance=spatial_distance,
-                            temporal_gap=temporal_gap,
-                            direction_score=direction_score,
-                            size_similarity=size_similarity,
-                            confidence_score=confidence,
-                        )
-                    )
+                    candidates.append(MergeCandidate(traj_a_id = traj_a.track_id,
+                                                     traj_b_id = traj_b.track_id,
+                                                     spatial_distance = spatial_distance,
+                                                     temporal_gap = temporal_gap,
+                                                     direction_score = direction_score,
+                                                     size_similarity = size_similarity,
+                                                     confidence_score = confidence))
+                    
                     # Update merge counts so later iterations respect the limit.
-                    merge_counts[traj_a.track_id] = (
-                        merge_counts.get(traj_a.track_id, 0) + 1
-                    )
-                    merge_counts[traj_b.track_id] = (
-                        merge_counts.get(traj_b.track_id, 0) + 1
-                    )
+                    merge_counts[traj_a.track_id] = (merge_counts.get(traj_a.track_id, 0) + 1)
+                    merge_counts[traj_b.track_id] = (merge_counts.get(traj_b.track_id, 0) + 1)
  
         candidates.sort(key=lambda c: c.confidence_score, reverse=True)
         return candidates
  
-    # ------------------------------------------------------------------
-    # Union-find grouping (unchanged)
-    # ------------------------------------------------------------------
- 
-    def _build_merge_groups(
-        self, candidates: List[MergeCandidate], num_trajs: int
-    ) -> Dict[int, Set[int]]:
+    # main processor
+    def _build_merge_groups(self, candidates: List[MergeCandidate], num_trajs: int) -> Dict[int, Set[int]]:
         """
-        Build merge groups using union-find.
-        Returns a dict mapping trajectory ID → set of all IDs it merges with.
+        Build merge groups using union-find and return dict mapping
         """
         id_set: Set[int] = set()
         for c in candidates:
@@ -293,14 +239,10 @@ class TrajectoryMerger:
  
         return groups
  
-    # ------------------------------------------------------------------
-    # Merging
-    # ------------------------------------------------------------------
- 
+    
     def _merge_trajectory_group(self, trajectories: List[Trajectory]) -> Trajectory:
         """
         Merge a group of temporally non-overlapping trajectories into one.
-        Uses the smallest track_id as the canonical ID.
         """
         if len(trajectories) == 1:
             return trajectories[0]
@@ -315,10 +257,7 @@ class TrajectoryMerger:
  
         return merged
  
-    # ------------------------------------------------------------------
-    # Geometry helpers (unchanged)
-    # ------------------------------------------------------------------
- 
+    # extra helper
     def _get_start_position(self, traj: Trajectory) -> Tuple[float, float]:
         if not traj.detections:
             return (0.0, 0.0)
@@ -329,14 +268,10 @@ class TrajectoryMerger:
             return (0.0, 0.0)
         return traj.detections[-1].center
  
-    def _euclidean_distance(
-        self, p1: Tuple[float, float], p2: Tuple[float, float]
-    ) -> float:
+    def _euclidean_distance( self, p1: Tuple[float, float], p2: Tuple[float, float]) -> float:
         return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
  
-    def _calculate_direction_score(
-        self, traj_a: Trajectory, traj_b: Trajectory
-    ) -> float:
+    def _calculate_direction_score(self, traj_a: Trajectory, traj_b: Trajectory) -> float:
         frames_a, xs_a, ys_a = traj_a.get_path()
         if len(frames_a) < 2:
             return 0.5
@@ -355,19 +290,9 @@ class TrajectoryMerger:
         cos_sim = (dx_a * dx_b + dy_a * dy_b) / (mag_a * mag_b)
         return (cos_sim + 1.0) / 2.0
  
-    def _calculate_size_similarity(
-        self, traj_a: Trajectory, traj_b: Trajectory
-    ) -> float:
-        end_areas_a = (
-            [traj_a.detections[0].area]
-            if len(traj_a.detections) < 2
-            else [d.area for d in traj_a.detections[-3:]]
-        )
-        start_areas_b = (
-            [traj_b.detections[0].area]
-            if len(traj_b.detections) < 2
-            else [d.area for d in traj_b.detections[:3]]
-        )
+    def _calculate_size_similarity(self, traj_a: Trajectory, traj_b: Trajectory) -> float:
+        end_areas_a = ([traj_a.detections[0].area] if len(traj_a.detections) < 2 else [d.area for d in traj_a.detections[-3:]])
+        start_areas_b = ([traj_b.detections[0].area] if len(traj_b.detections) < 2 else [d.area for d in traj_b.detections[:3]])
         avg_a = sum(end_areas_a) / len(end_areas_a)
         avg_b = sum(start_areas_b) / len(start_areas_b)
         if avg_a < 1e-6:
@@ -375,27 +300,20 @@ class TrajectoryMerger:
         return min(avg_a, avg_b) / max(avg_a, avg_b)
  
  
-# ------------------------------------------------------------------
-# Convenience wrapper
-# ------------------------------------------------------------------
- 
-def merge_trajectory_store(
-    store: TrajectoryStore,
-    spatial_threshold: float = 150.0,
-    temporal_threshold: int = 45,
-    confidence_threshold: float = 0.5,
-    density_radius: float = 200.0,
-    density_threshold: int = 4,
-    max_merges: int = 2,
-) -> TrajectoryStore:
+# convenience function for testing/helpingg.debugging
+def merge_trajectory_store(store: TrajectoryStore,
+                           spatial_threshold: float = 150.0,
+                           temporal_threshold: int = 45,
+                           confidence_threshold: float = 0.5,
+                           density_radius: float = 200.0,
+                           density_threshold: int = 4,
+                           max_merges: int = 2) -> TrajectoryStore:
     """Convenience function to merge trajectories in a TrajectoryStore."""
-    merger = TrajectoryMerger(
-        spatial_threshold=spatial_threshold,
-        temporal_threshold=temporal_threshold,
-        confidence_threshold=confidence_threshold,
-        density_radius=density_radius,
-        density_threshold=density_threshold,
-        max_merges=max_merges,
-    )
+    merger = TrajectoryMerger(spatial_threshold = spatial_threshold,
+                             temporal_threshold = temporal_threshold,
+                             confidence_threshold = confidence_threshold,
+                             density_radius = density_radius,
+                             density_threshold = density_threshold,
+                             max_merges = max_merges)
     return merger.merge_trajectories(store)
  

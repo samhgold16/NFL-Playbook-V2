@@ -9,9 +9,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Union
 from dataclasses import dataclass, field
 from collections import defaultdict
-
 from ..tracking.trajectory import Trajectory, TrajectoryStore, Detection
-
 
 @dataclass
 class ParsedTrajectory:
